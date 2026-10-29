@@ -1,0 +1,7 @@
+# Dependencies, secrets, and generated files
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.superpowers/

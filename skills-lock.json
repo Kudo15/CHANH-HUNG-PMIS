@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "prompt-lookup": {
+      "source": "f/prompts.chat",
+      "sourceType": "github",
+      "skillPath": "plugins/claude/prompts.chat/skills/prompt-lookup/SKILL.md",
+      "computedHash": "97fa81279a6ecacb6b1139e2ef972355f2f71577bd8213498a21d1db20008999"
+    }
+  }
+}

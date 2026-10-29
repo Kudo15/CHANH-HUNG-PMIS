@@ -1,0 +1,16 @@
+{
+  "routing": "unavailable",
+  "status": "NEEDS_HUMAN_SELECTION",
+  "hermesVersionCheck": {
+    "command": "hermes --version",
+    "exitCode": 1,
+    "observed": "Install state is not writable by this user; Hermes reported an install lock under the current user's LocalAppData."
+  },
+  "autoDispatch": false,
+  "roles": {
+    "planner": "NEEDS_HUMAN_SELECTION",
+    "worker": "NEEDS_HUMAN_SELECTION",
+    "reviewer": "NEEDS_HUMAN_SELECTION",
+    "quick": "NEEDS_HUMAN_SELECTION"
+  }
+}
