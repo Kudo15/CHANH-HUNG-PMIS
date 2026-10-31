@@ -1,0 +1,21 @@
+# CHPMIS-009-R1 — Independent baseline review
+
+- Role: Hermes Reviewer, separate read-only Kanban card/session; inherited default profile/model.
+- Template: Senior Code Reviewer (severity-ranked), prompts.chat `cmv9n79m30005ku060pzornri`, previously retrieved through prompt-lookup and adapted in CHPMIS-007/008; adapted here to documentation and checkpoint safety.
+- Read AGENTS.md, charter, CHPMIS-009 task pack/plan, ledger, current-state docs, audit script, manifest, checkpoint instructions and T1 evidence. Review only CHPMIS-009 allowed changes; historical source baseline is pre-existing.
+- Do not edit files, stage, commit, push, install, change providers or run application tests. No Worker session was used: the Coordinator authored documentation and non-product audit tooling within charter authority.
+- Check requirement consistency, truthful historical/current evidence, exactly 10 PASS/5 NOT_VERIFIED, correct routing, no source/index changes against fingerprints, candidate-secret/generated-file filtering and limitations, manifest self exclusion, no premature worktree/commit/runtime claims, and the explicit PostgreSQL-test follow-up.
+- Optional read-only commands are only those listed in the main CHPMIS-009 pack. Any failure or permission denial is reported, not bypassed. No external/provider/production access.
+- Tester run failed at the harness level due quota after all five assigned commands ran with tool exit 0. Independently examine T1's raw shell events at `C:\Users\ANHVU\.opencode\role-runs\runs\2026-10-30T23-21-16-verifier-chpmis-009-t1-baseline-independent-verif-5b83\stdout.log`. Decide whether the captured execution evidence satisfies the task's independent verification DoD despite missing final Tester narrative; preserve run status FAILED and assess the four extra read-only introspections reported in T1. No fallback Tester was dispatched.
+- Give APPROVED or CHANGES_REQUESTED, with P1/P2/P3 findings at exact file:line and correction direction. Do not treat a scan as a compliance certification. Complete the card with the full verdict/evidence.
+
+## Result
+APPROVED, zero P1/P2/P3 findings. Hermes card `t_15f91a2f`, run #29, profile `default`, status done; run metadata worker_session_id `20261031_062359_4578d3` (card session_id is null). Workspace `dir:D:\ANH VU\Google Drive\VUHOCAI\Project\CHANH HUNG PMIS`; no branch, model/provider/cost/tokens not exposed; no overrides. The Kanban card exists on the shared board; Desktop UI visibility was not independently inspected.
+
+Reviewer verified candidate inventory (125 files excluding manifest, 64 product/config files), original source/index fingerprints, exactly 10 PASS/5 NOT_VERIFIED, candidate filtering and scan limits, self exclusion, uncommitted checkpoint safety, CHPMIS-009-F1 and the T1 raw shell events. It reran baseline verification commands and accepted captured T1 execution evidence as satisfying independent execution DoD while preserving FAILED harness status and the four additional read-only introspections as a procedure deviation.
+
+Recorded summary: `APPROVED: Independent read-only baseline review completed with zero P1/P2/P3 defects. All 5 baseline verification commands and source/index fingerprints were independently verified. Raw execution events from OpenCode T1 confirm successful command execution prior to quota failure, satisfying verification DoD.`
+
+After review, the owner explicitly chose to repair OpenCode quota/model and keep the task waiting for a complete verifier rerun. This approval is retained; CHPMIS-009 is not marked complete. Coordinator refreshes the manifest after evidence/status edits.
+
+Subsequent closure: the final authorized OpenCode retry `2026-10-30T23-34-53-verifier-chpmis-009-t1-verifier-retry-after-confi-767b` completed exactly five commands with exit 0 and ROLE_RESULT done. Coordinator checked raw shell events and retained this existing review verdict; no new Reviewer run was performed. The changes after review are evidence/status appendices and regenerated manifest, with source/audit implementation unchanged. CHPMIS-009 can be closed after final Coordinator manifest/index checks; the paragraph above records the earlier hold, not current status.

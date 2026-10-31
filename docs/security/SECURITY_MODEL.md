@@ -3,14 +3,23 @@
 ## Principles
 Least privilege; deny by default; backend authorization authority; department/project isolation; data minimization; auditable important actions; configurable organization policy, not hardcoded units or titles.
 
-## Authentication
-Secure authentication is required, but identity source, local-vs-SSO, MFA, session/cookie strategy, recovery, lockout, and provisioning are unresolved. Do not choose a provider or store credentials before owner approval. Keep secrets outside Git.
+## Authentication — approved for local first slice (2026-10-30)
+- Use provider-neutral organization OIDC SSO; no public self-registration and no local-password fallback. The exact IdP is not selected; keep endpoint/client configuration external and secrets out of Git.
+- The IdP is authoritative for account identity/state and department membership. PMIS project membership remains an explicit app grant.
+- MFA is IdP-managed; phishing-resistant authentication should be available. Deprovisioned/denied IdP identities cannot retain an application session.
+- Use server-managed opaque sessions in `Secure`, `HttpOnly`, `SameSite=Lax` cookies with CSRF protection, session rotation on login/privilege change, and revocation on logout/deprovision. Local first-slice target: 30-minute idle and 12-hour absolute timeout.
 
-## Authorization
-Combine RBAC grants with ABAC checks for account state, department membership, project scope, workflow state, and document restriction. Check all API paths, IDs, list/search queries, dashboard counts, exports, and future storage access on the server. UI visibility is not authorization.
+## Authorization — approved for local first slice (2026-10-30)
+- Combine approved role permissions with account state and explicit project membership. Department membership alone does not grant project access. Deny by default and validate on every request.
+- System Admin manages account/role configuration but receives no implicit business-data access. Project Manager acts only within assigned projects. Member reads assigned projects and changes only own assigned task state. Auditor reads audit only for explicitly assigned projects. No global auditor role in this slice.
+- A user cannot self-grant System Admin; a second existing System Admin must approve its grant/revocation. Cross-department cooperation requires explicit project membership.
+- Check item routes, lists/search, dashboard aggregates, audit reads, and future file access on the server. For task-ID routes, resolve the parent project and validate project scope before reading/mutating. UI visibility is not authorization.
 
-## Audit
-Audit important project, assignment, task, workflow, administrative, and document-access actions. Capture only necessary metadata; never log secrets or document contents. Append-only guarantees, reader privileges, retention, and denied-request policy require security/owner review.
+## Audit — approved for local first slice (2026-10-30)
+- Record authentication events, role grants/revocations, project lifecycle/assignment changes, and task assignment/state changes. Store actor, UTC time, action, target/project IDs, correlation ID, and allowlisted before/after values; exclude credentials, tokens, document contents, and free-form descriptions.
+- Audit records are append-only at the application level. Reads are project-scoped; no global access or export in this slice.
+- Business mutation and audit write are atomic in one transaction. If audit persistence fails, roll back the mutation and return an error.
+- Synthetic local data only; no automatic audit deletion for this slice. Production is blocked until an authoritative records-retention and privacy/classification schedule is verified.
 
 ## Data handling
 Use synthetic fixtures only. Do not upload agency documents to external LLMs. S3 encryption, malware scanning, signed URL behavior, retention/deletion, backups, and data residency need decisions before M05/deployment.

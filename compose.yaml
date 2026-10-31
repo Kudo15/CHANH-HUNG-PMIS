@@ -1,0 +1,61 @@
+# Synthetic local development only. Container listeners are reached through loopback host ports.
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pmis_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-pmis_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copy .env.example to .env and set a synthetic local password}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL for the Compose db hostname in .env}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  frontend:
+    build: ./frontend
+    environment:
+      API_PROXY_TARGET: http://backend:8000
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      - backend
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    profiles:
+      - local-oidc
+    command: start-dev --import-realm --health-enabled=true
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?Set KC_BOOTSTRAP_ADMIN_PASSWORD in process env or .env}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Set OIDC_CLIENT_SECRET in process env or .env}
+      KC_SYNTHETIC_ADMIN1_PASSWORD: ${KC_SYNTHETIC_ADMIN1_PASSWORD:?Set KC_SYNTHETIC_ADMIN1_PASSWORD in process env or .env}
+      KC_SYNTHETIC_ADMIN2_PASSWORD: ${KC_SYNTHETIC_ADMIN2_PASSWORD:?Set KC_SYNTHETIC_ADMIN2_PASSWORD in process env or .env}
+      JAVA_OPTS_APPEND: "-Dkeycloak.migration.replace-placeholders=true"
+      KC_HOSTNAME: http://127.0.0.1:8081
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_PORT: 8080
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - ./dev/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+volumes:
+  pgdata:

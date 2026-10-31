@@ -1,0 +1,86 @@
+{
+  "id": "chpmis-dev",
+  "realm": "chpmis-dev",
+  "displayName": "CHPMIS Synthetic Local Realm",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "clients": [
+    {
+      "clientId": "pmis-local",
+      "name": "PMIS Local Client",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "secret": "${OIDC_CLIENT_SECRET}",
+      "redirectUris": [
+        "http://127.0.0.1:8000/api/v1/auth/callback",
+        "http://127.0.0.1:5173/*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "protocolMappers": [
+        {
+          "name": "department-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "department",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "department",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "synthetic-admin-1",
+      "enabled": true,
+      "email": "admin1@synthetic.local",
+      "firstName": "Synthetic",
+      "lastName": "AdminOne",
+      "attributes": {
+        "department": [
+          "Administration"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_SYNTHETIC_ADMIN1_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "synthetic-admin-2",
+      "enabled": true,
+      "email": "admin2@synthetic.local",
+      "firstName": "Synthetic",
+      "lastName": "AdminTwo",
+      "attributes": {
+        "department": [
+          "Security"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_SYNTHETIC_ADMIN2_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

@@ -3,7 +3,7 @@
 ## Task ID and execution role
 - Task ID: CHPMIS-002
 - Role: Worker (platform foundation)
-- Status: READY TO DISPATCH; plan review confirmed; Docker runtime verification is known unavailable.
+- Status: IMPLEMENTED; independent Reviewer APPROVED; Tester checks passed where runnable. Docker/PostgreSQL/remote CI evidence remains NOT_VERIFIED.
 
 ## Context
 CHÁNH HƯNG PMIS is a new repository with approved product/architecture planning docs but no application files or dependencies. This task builds only the local technical foundation. It does not implement authentication, authorization policy, project/task schemas, business workflows, financial logic, or production deployment.

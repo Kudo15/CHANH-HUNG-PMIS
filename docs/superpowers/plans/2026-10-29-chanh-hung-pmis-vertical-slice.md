@@ -47,13 +47,15 @@
 **Files:** create the planned `frontend/`, `backend/`, `compose.yaml`, `.github/workflows/ci.yml`; modify `README.md`, `.env.example`, `.gitignore` only as required.
 **Interfaces:** expose backend liveness/readiness; frontend build/test scripts; backend pytest/lint scripts; PostgreSQL readiness; no product-auth or business schema in this task.
 
-- [ ] Write `backend/tests/test_health.py::test_live_returns_ok`, `test_ready_reflects_database_availability`, and `frontend/src/App.test.tsx::renders_application_shell`.
-- [ ] Run `py -3.13 -m pytest -q tests/test_health.py` from `backend/` and `npm test -- --run` from `frontend/`; record the expected initial failures.
-- [ ] Implement pinned dependencies and scripts; add Docker Compose with all host ports on `127.0.0.1`, a health-checked PostgreSQL service, and no real data/secrets.
-- [ ] Add `/health/live` and `/health/ready`; readiness reports dependency failure accurately.
-- [ ] Add CI for config validation, backend/frontend checks and tests; do not add deployment steps.
-- [ ] Run `docker compose config`, `py -3.13 -m pytest -q` from `backend/`, `npm test -- --run`, and `npm run build` from `frontend/`; record exit codes. If Docker remains absent, mark its checks `NOT_VERIFIED`.
-- [ ] Reviewer checks localhost bindings, secrets, dependencies, health semantics, and scope; record verdict.
+- [x] Write `backend/tests/test_health.py::test_live_returns_ok`, `test_ready_reflects_database_availability`, and `frontend/src/App.test.tsx::renders_application_shell`.
+- [x] Run focused backend/frontend tests first and record the expected initial failures (both observed).
+- [x] Implement pinned dependencies and scripts; add Docker Compose with all host ports on `127.0.0.1`, a health-checked PostgreSQL service, and no real data/secrets.
+- [x] Add `/health/live` and `/health/ready`; readiness reports dependency failure accurately.
+- [x] Add CI for config validation, backend/frontend checks and tests; no deployment steps.
+- [x] Run available backend/frontend tests, lint, build, E2E, and offline migration checks; exact results are in `ACCEPTANCE.md`. `docker compose config` could not run because Docker is absent and remains `NOT_VERIFIED`.
+- [x] Independent Reviewer reviewed localhost bindings, secrets, dependencies, health semantics, and scope; verdict `APPROVED`.
+
+**Execution result:** Partial. Local checks pass and the independent reviewer approved. Compose configuration/runtime, migration against PostgreSQL, and remote CI have not been verified. See `ACCEPTANCE.md` and `.team/ledger.md`.
 
 **DoD:** repeatable local foundation with valid Compose, health checks, actual test commands, CI tests, synthetic-only configuration, and independent review.
 **Gate:** no schema/auth implementation in this task. Prompt template and human plan review must be complete before dispatch.

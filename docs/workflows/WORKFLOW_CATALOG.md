@@ -1,12 +1,17 @@
 # Workflow Catalog
 
-> No official approval route or legal process is defined. Internal task workflow is distinct from statutory/legal approval.
+> First-slice task workflow was approved by the project owner on 2026-10-30 for local development. No official approval route or legal process is defined. Internal task workflow is distinct from statutory/legal approval.
 
-## First-slice candidate
-A task needs configurable state and permitted transitions. Illustrative states might be `open`, `in_progress`, `blocked`, `done`; these values and transition rights are **not approved**. Do not implement until the owner confirms meanings, reopening/cancellation, assignment, and who may transition each state.
+## Approved first-slice task states and transitions
+- States: `open`, `in_progress`, `blocked`, `done`, `cancelled`.
+- Ordinary work path: `open → in_progress`; `in_progress → blocked|done`; `blocked → in_progress`.
+- Project Manager may cancel an unfinished task and reopen `done → in_progress`; `cancelled` is terminal.
+- Member may transition only a task assigned to them along the ordinary work path. Project Manager may assign/reassign only within the explicitly scoped project and may perform the management transitions above.
+- Project Manager may archive an in-scope project. Archived projects are read-only; no delete transition is approved.
+- These internal coordination states do not represent statutory/legal approval, acceptance, or other legal authority.
 
 ## Required properties
-- States and transitions are configurable, not hardcoded to department names/titles.
+- States and transitions are enforced by the backend; role names are policy keys, not department names/titles.
 - Backend transition checks include role, department/project scope, and current state.
 - Important transitions create audit history with actor and time.
 - Internal coordination/review does not imply legal approval.

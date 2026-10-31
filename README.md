@@ -4,14 +4,16 @@ Secure modular-monolith project information management system for Ban QLDA phư�
 
 ## Current stage
 
-Planning and product/security proposals are documented. Repository audit found no application code, dependencies, migrations, or project test commands. Product implementation has not started.
+CHPMIS-003–008 delivered the local OIDC/session and authorization foundation, projects/members/tasks, approved task transitions, scoped dashboard/audit, and Project Workbench. CHPMIS-010 verified local Compose/PostgreSQL runtime and obtained Hermes evidence review approval. Acceptance is 12 of 15 PASS; remote CI, actual IdP sign-in and the full authenticated browser journey remain NOT_VERIFIED. See `ACCEPTANCE.md` and `.team/tasks/CHPMIS-010-runtime-evidence.md`.
+
+CHPMIS-009 completed documentation reconciliation and candidate checkpoint preparation, with OpenCode independent verification and Hermes review approval. Source files remain untracked until a separate local checkpoint is actually staged and committed; a manifest alone does not make a worktree usable. See `.team/baselines/CHPMIS-009-checkpoint.md`.
 
 ## Start here
 
 1. Read `AGENTS.md` and `.team/CHARTER.md`.
 2. Review `docs/MISSION.md`, `docs/product/PRD.md`, and `OPEN_QUESTIONS.md`.
 3. Review the first vertical slice plan at `docs/superpowers/plans/2026-10-29-chanh-hung-pmis-vertical-slice.md`.
-4. Resolve Human Gates and install/verify prompt-lookup before dispatching Worker tasks.
+4. Read current status and execution order in `PLAN.md` and `TASKS.md`. HG1–HG5 are approved for the local first slice; production/provider/bootstrap decisions remain open in `OPEN_QUESTIONS.md`.
 
 ## Project documents
 
@@ -26,6 +28,40 @@ Planning and product/security proposals are documented. Repository audit found n
 
 - Superpowers exists in the current Codex skill catalog.
 - Prompt-search skill `prompt-lookup` is installed in `.agents/skills/prompt-lookup`; Codex is connected to `https://prompts.chat/api/mcp`. Search and retrieval were verified for architecture, code review, and testing templates; adapted template IDs and links are recorded in the Worker task pack.
-- Node 22.23.2/npm 10.9.8 and Python 3.12/3.13 are available. Docker is not installed, so Compose runtime/config checks cannot currently be executed.
-- Hermes `--version` failed with exit code 1 because this user cannot write the install-state lock. No permissions or providers were changed; profiles/models/Kanban/GUI remain unverified.
-- Git was initialized locally; no remote, commit, push, or deployment was created.
+- Environment observations from CHPMIS-002/006: Node 22.23.2/npm 10.9.8 and Python 3.12/3.13 were available; Docker was absent. CHPMIS-009 does not recheck or install runtime tools; CHPMIS-010 subsequently completed runtime preflight and verification.
+- CHPMIS-010 update: owner-authorized Docker Desktop 4.97.0 installed per-user with verified published SHA/signature. CLI 29.9.2 and Compose v5.6.1 work; Compose configuration validation exit 0. Owner handled terms; Engine/stack/PostgreSQL verification completed, focused test 1 passed/full 63 passed, Hermes evidence review APPROVED. Task containers are stopped and synthetic volume retained. In older shells use `%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe` if PATH has not refreshed.
+- Routing in `.team/routing.json`: Hermes CLI Kanban Worker and separate Reviewer on the inherited `default` profile; independent OpenCode `role-verifier` Tester on its configured default model; Codex Coordinator/Planner on its configured default. Run sequentially in the existing checkout until a committed baseline is verified in any worktree. Dispatch is explicit.
+- Git is local with no remote. CHPMIS-009 prepares, but does not stage or commit, the checkpoint candidates.
+
+## Run the local foundation
+
+Requires Node 22.23.2+, Python 3.13, and Docker Compose v2 for the full stack.
+
+1. Copy `.env.example` to `.env`. Replace the password placeholder in both `POSTGRES_PASSWORD` and `DATABASE_URL` with the same synthetic development value. URL-encode password characters in the URL.
+2. From the repository root, run `docker compose up --build -d`.
+3. Apply the existing migration chain through revision `0004`: `docker compose exec backend python -m alembic upgrade head` against a disposable synthetic development database.
+4. Open `http://127.0.0.1:5173`. API health is at `http://127.0.0.1:8000/health/live` and `/health/ready`.
+5. Stop with `docker compose down`. The named PostgreSQL volume persists local data.
+
+Every published Compose port binds to `127.0.0.1`. Container processes listen on their container interfaces so the loopback mappings can reach them. This configuration is for local synthetic development.
+
+### Native backend (PowerShell)
+
+```powershell
+cd backend
+py -3.13 -m venv .venv
+.venv/Scripts/python -m pip install -r requirements-dev.txt
+$env:DATABASE_URL = 'postgresql+psycopg://pmis_dev:CHANGE_ME_LOCAL_ONLY@127.0.0.1:5432/pmis_dev'
+.venv/Scripts/python -m alembic upgrade head
+.venv/Scripts/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Set `DATABASE_URL` in the process environment; the backend does not load a `.env` file automatically. An unset database URL allows liveness to run and returns readiness HTTP 503. Readiness runs `SELECT 1` on each request and returns HTTP 200 only when the dependency responds. It does not certify migration currency. Database connection and statement timeouts are three seconds each.
+
+### Frontend and verification
+
+From `frontend/`: `npm ci`, `npm run dev`, `npm test -- --run`, `npm run lint`, and `npm run build`. The development server binds to `127.0.0.1:5173` and currently proxies only `/health` to the native backend. Full browser API/OIDC routing is not yet verified. Run `npx playwright install chromium` once, then `npm run test:e2e` for the shell smoke check; it is not the complete authenticated journey.
+
+From `backend/`: `.venv/Scripts/python -m pytest -q`, `.venv/Scripts/python -m ruff check .`, and `.venv/Scripts/python -m ruff format --check .`. On Linux/CI use `python` from the installed environment. `python -m alembic upgrade head --sql` renders the current migration chain offline; it does not verify PostgreSQL execution. The PostgreSQL integration test is skipped without `TEST_DATABASE_URL`. CHPMIS-010 corrected its obsolete assertions to the approved revision `0004_projects_tasks_audit` and exact ten-table set. OpenCode independently recorded 62 passed/1 skipped before runtime setup. CHPMIS-010 Coordinator then ran focused live PostgreSQL (1 passed) and full backend (63 passed/no skips), both exit 0; Hermes independently reviewed and accepted that evidence without a live rerun. Use only a dedicated disposable test database.
+
+CI defines backend lint/tests with disposable PostgreSQL, Compose config validation, frontend lint/tests/build, and a Playwright shell smoke check. No remote CI run or Docker runtime/config result is implied by adding this workflow.

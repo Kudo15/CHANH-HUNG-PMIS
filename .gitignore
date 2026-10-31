@@ -5,3 +5,21 @@
 .DS_Store
 Thumbs.db
 .superpowers/
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+pytest-cache-files-*/
+.ruff_cache/
+*.tsbuildinfo
+playwright-report/
+test-results/
+coverage/
+.coverage
+htmlcov/
+pgdata/
+*.log
+# Preserve but exclude the Windows shell redirection residue from checkpoints.
+backend/nul

@@ -1,16 +1,133 @@
 {
-  "routing": "unavailable",
-  "status": "NEEDS_HUMAN_SELECTION",
-  "hermesVersionCheck": {
-    "command": "hermes --version",
-    "exitCode": 1,
-    "observed": "Install state is not writable by this user; Hermes reported an install lock under the current user's LocalAppData."
+  "_comment": "Project routing policy. Hermes CLI Kanban handles explicit Worker/Reviewer cards; OpenCode shared service handles independent Tester/Verifier cards; all other roles inherit Codex's configured default model. Dispatch and auto-run remain off.",
+  "status": "OPENCODE_TESTER_ROUTE_CONFIGURED_SMOKE_PASS",
+  "verification": {
+    "hermesDesktop": {
+      "status": "WINDOW_OPEN",
+      "evidence": "Accessibility tree read from the Hermes Desktop window; Sessions/Bots tabs and Backend ready indicator present. Visual capture timed out, and GUI session creation could not be operated because coordinate input geometry is unavailable."
+    },
+    "hermesCli": {
+      "status": "SMOKE_PASS_EXPLICIT_DISPATCH",
+      "command": "hermes --version; hermes kanban boards show; hermes gateway status",
+      "observed": "CLI version and board read succeeded outside sandbox; gateway is stopped, so each card requires explicit dispatch. HERMES-SMOKE-002 card t_075840fe completed, run 24, exit 0, marker received.",
+      "profile": "default",
+      "model": "gemini-3.8-flash-high (run metadata)",
+      "provider": "custom (run metadata; provider mapping not independently resolved)",
+      "workerSessionId": "20261030_154027_6bef15",
+      "sessionIdField": "NOT_EXPOSED",
+      "guiVisibility": "NOT_OBSERVED"
+    },
+    "discovery": {
+      "effort": "NOT_EXPOSED",
+      "hermesProject": {
+        "slug": "chanh-hung-pmis",
+        "id": "p_4aea8282",
+        "primary": "D:\\ANH VU\\Google Drive\\VUHOCAI\\Project\\CHANH HUNG PMIS",
+        "evidence": "hermes project create exit 0; project details confirmed in output"
+      },
+      "worktree": "Hermes CLI exposes --worktree; GUI/session worktree behavior NOT_VERIFIED"
+    },
+    "profileAndWorkspace": "Default profile and project root discovered via CLI; HERMES-SMOKE-002 requested scratch but dispatcher created a worktree under the repo. GUI visibility is not required for CLI Kanban routing.",
+    "guiSmokeTest": {
+      "status": "NOT_REQUIRED_FOR_SELECTED_ROUTE",
+      "note": "Worker/Reviewer routing uses Hermes CLI Kanban cards, not GUI-created sessions. Board visibility is checked from the Kanban card/run trace."
+    },
+    "opencode": {
+      "status": "SMOKE_PASS_AFTER_MODEL_CONFIGURATION_UPDATE",
+      "version": "opencode v2.2.2",
+      "service": "http://127.0.0.1:28894",
+      "desktopApp": "RUNNING",
+      "apiInfo": "HTTP 200",
+      "modelSelection": "inherit-active-opencode-configured-default; --model omitted; model_used not exposed in run metadata",
+      "smokeRunId": "2026-10-30T10-02-54-verifier-opencode-smoke-003-focused-read-only-tes-02b7",
+      "sessionId": "ses_e73bcd2f7ffex6QJco8NfHDHbC",
+      "guiVisible": true,
+      "exitCode": 0,
+      "summary": "npm --prefix frontend run test -- --run -t \\\"calculates isTaskOverdue with frozen time and terminal exclusion\\\": 1 passed / 14 skipped; exit 0",
+      "tokens": { "input": 14642, "output": 968, "reasoning": 941 },
+      "costUsd": 0,
+      "priorSmokeRunIds": [
+        "2026-10-30T09-38-31-verifier-opencode-smoke-003-focused-read-only-tes-8275",
+        "2026-10-30T09-59-01-verifier-opencode-smoke-003-focused-read-only-tes-7b86"
+      ],
+      "evidence": "After the user reported a further model configuration update, preflight and dry-run passed; the authorized smoke completed under role-verifier, no model override, exit 0. Earlier two attempts had failed before test execution on free-tier entitlement."
+    }
   },
   "autoDispatch": false,
-  "roles": {
-    "planner": "NEEDS_HUMAN_SELECTION",
-    "worker": "NEEDS_HUMAN_SELECTION",
-    "reviewer": "NEEDS_HUMAN_SELECTION",
-    "quick": "NEEDS_HUMAN_SELECTION"
+  "autoRun": false,
+  "scheduledJobs": {
+    "enabled": false,
+    "observedCount": 0,
+    "gateway": "stopped"
+  },
+  "codex": {
+    "model": "inherit-user-configured-default",
+    "effort": "inherit-user-configured-default",
+    "_comment": "No model or effort override is sent; use the user's configured Codex defaults."
+  },
+  "planner": {
+    "harness": "codex-internal",
+    "modelPolicy": "inherit-user-configured-default",
+    "_why": "Planner remains in Codex to coordinate and receive the worker/reviewer results. Coordinator does not write product code."
+  },
+  "worker": {
+    "harness": "hermes-cli-kanban",
+    "sessionSurface": "Kanban board card",
+    "roleHeader": "role=worker",
+    "profile": "default",
+    "_modelPolicy": "inherit-active-hermes-profile; never override undiscovered model/provider",
+    "projectSlug": "chanh-hung-pmis",
+    "projectId": "p_4aea8282",
+    "workspace": "dir:<repository-root> while the current baseline remains untracked/uncommitted; verify source in a local commit and worktree before relying on isolation",
+    "isolation": "serialized current-checkout cards while baseline is untracked; use worktrees only after verifying the required baseline is present",
+    "_worktreeNote": "Historical smoke requested scratch but Hermes created an unregistered project worktree, later removed after verification. Current route: explicit dir:<repository-root>, Worker then OpenCode Tester then a separate read-only Hermes Reviewer, sequentially. CHPMIS-007 historically used a Codex Tester before OpenCode routing was adopted.",
+    "taskPackRequired": true,
+    "promptLibrarianRequired": true,
+    "tddRequiredForCode": true,
+    "effort": "inherit-active-hermes-profile",
+    "priority": 2,
+    "maxRuntime": "20m",
+    "autoDispatch": false,
+    "autoRun": false
+  },
+  "reviewer": {
+    "harness": "hermes-cli-kanban",
+    "sessionSurface": "separate Kanban card/session",
+    "roleHeader": "role=reviewer",
+    "profile": "default",
+    "_modelPolicy": "inherit-active-hermes-profile; never override undiscovered model/provider",
+    "projectSlug": "chanh-hung-pmis",
+    "projectId": "p_4aea8282",
+    "workspace": "dir:<repository-root> while baseline is uncommitted; inspect only assigned task files/evidence in a separate read-only card/session",
+    "isolation": "separate card/session; read-only; run after Worker and Tester complete",
+    "taskPackRequired": true,
+    "promptLibrarianRequired": true,
+    "effort": "inherit-active-hermes-profile",
+    "priority": 1,
+    "maxRuntime": "20m",
+    "autoDispatch": false,
+    "autoRun": false
+  },
+  "quick": {
+    "harness": "codex-internal",
+    "modelPolicy": "inherit-user-configured-default",
+    "_why": "Short tasks or tasks requiring current conversation context stay in Codex."
+  },
+  "tester": {
+    "harness": "opencode-cli-background-service",
+    "role": "verifier",
+    "sessionSurface": "OpenCode Desktop shared service",
+    "modelPolicy": "inherit-active-opencode-configured-default",
+    "workspace": "same repository directory; serialized after Worker; read-only verifier",
+    "taskPackRequired": true,
+    "promptLibrarianRequired": true,
+    "autoDispatch": false,
+    "autoRun": false,
+    "_why": "Independent Tester/Verifier uses OpenCode with edit denied; run after Worker and before Hermes Reviewer. Do not pass --model; preserve OpenCode's configured default."
+  },
+  "analystArchitectCoordinator": {
+    "harness": "codex-internal",
+    "modelPolicy": "inherit-user-configured-default",
+    "_why": "All non-Worker/Reviewer planning roles use Codex's configured defaults."
   }
 }

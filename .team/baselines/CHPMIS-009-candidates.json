@@ -1,0 +1,782 @@
+{
+  "task": "CHPMIS-009",
+  "head": "2189d2729139bf66f66f9bd7b8f5c5342cebe5f7",
+  "indexSha256": "6f690d47fbe52cb757527085e1cd5f7138db82935873b6fd3f15ed1fa68d6562",
+  "productConfigSha256": "f535b91c11c5568d0f18f1747a60f926c93b082b8ef7267a4c840ba8a73206a4",
+  "manifestSelfExcluded": ".team/baselines/CHPMIS-009-candidates.json",
+  "candidateCountExcludingManifest": 125,
+  "trackedCount": 30,
+  "untrackedCountExcludingManifest": 95,
+  "productConfigFileCount": 64,
+  "acceptance": {
+    "AC-01": "NOT_VERIFIED",
+    "AC-02": "PASS",
+    "AC-03": "NOT_VERIFIED",
+    "AC-04": "NOT_VERIFIED",
+    "AC-05": "NOT_VERIFIED",
+    "AC-06": "PASS",
+    "AC-07": "PASS",
+    "AC-08": "PASS",
+    "AC-09": "PASS",
+    "AC-10": "PASS",
+    "AC-11": "PASS",
+    "AC-12": "PASS",
+    "AC-13": "PASS",
+    "AC-14": "NOT_VERIFIED",
+    "AC-15": "PASS"
+  },
+  "findings": [],
+  "scanLimit": "Heuristic high-confidence patterns and path checks only; not a guarantee of no secrets or agency data.",
+  "files": [
+    {
+      "path": ".agents/skills/prompt-lookup/SKILL.md",
+      "state": "tracked",
+      "bytes": 2109,
+      "sha256": "3b0097f8f23cb98662550b30768a8c00e68e47b0a422c3aeb0d778460ac39359"
+    },
+    {
+      "path": ".env.example",
+      "state": "tracked",
+      "bytes": 783,
+      "sha256": "06379bec80255c9ef43f68ea58bd40a1ead506cc77051a218b333a1d5825b8ad"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "state": "untracked",
+      "bytes": 1817,
+      "sha256": "0e3f523e5ad085550e6027b901cb14c393029313697da9678fee23dab5b412a1"
+    },
+    {
+      "path": ".gitignore",
+      "state": "tracked",
+      "bytes": 386,
+      "sha256": "f6befe1ca0098ffd7d3a4f52f6065ac6c08ababbb51da70e5c4b64c48cdc8361"
+    },
+    {
+      "path": ".team/CHARTER.md",
+      "state": "tracked",
+      "bytes": 3261,
+      "sha256": "7807a4beb7dcc353c8d921fae94bec74c8842fa885a1a891738da1fe2634aabc"
+    },
+    {
+      "path": ".team/REVIEWER.md",
+      "state": "tracked",
+      "bytes": 815,
+      "sha256": "56dc206a7a8183c64da56a5b25f13bc230b8908312da1717c1e5b0a1d5f7f363"
+    },
+    {
+      "path": ".team/TASK-PACK.md",
+      "state": "tracked",
+      "bytes": 1715,
+      "sha256": "25f07a1ec35975c1e69ba96d7785bc2298c3703ffaa66afe029776c4d6424d75"
+    },
+    {
+      "path": ".team/baselines/CHPMIS-009-checkpoint.md",
+      "state": "untracked",
+      "bytes": 3773,
+      "sha256": "1801d28d59720666b2debb808fdf2ffd0d83557ea1be753049a3348abf9bbd4d"
+    },
+    {
+      "path": ".team/ledger.md",
+      "state": "tracked",
+      "bytes": 38158,
+      "sha256": "84326bb02ec58627b8276636e80d1afe42b34118feff1e87c7159aa99cc05e04"
+    },
+    {
+      "path": ".team/routing.json",
+      "state": "tracked",
+      "bytes": 7133,
+      "sha256": "f53b2ec3b1c0bb85e3c0240d59372953435f21bb9b09bb97c978fc02fbfdef48"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-000-docs-and-plan.md",
+      "state": "tracked",
+      "bytes": 2371,
+      "sha256": "4fef73ce557d75dc07e3015833ce72481a84387ed013a4cd627f5158020642f3"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-001-human-gates.md",
+      "state": "tracked",
+      "bytes": 2414,
+      "sha256": "ef7c46cc735ba2378c089ba0df39a5622bf70f522acb6b8e9cf520aca37410da"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-002-platform-foundation.md",
+      "state": "tracked",
+      "bytes": 5390,
+      "sha256": "1210ae584a5d77b058ad791a4139aed347dca669acade060c3ab98650df4ee2f"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-003-F1-auth-security-remediation.md",
+      "state": "untracked",
+      "bytes": 9618,
+      "sha256": "9bd6dcdba56a23d2a32fe0a1c430fd1e5747ed2cd4580854bd2fd1199f47277a"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-003-F1-security-review.md",
+      "state": "untracked",
+      "bytes": 1764,
+      "sha256": "3601406e400f506383d804e1c60df6796294a6382abbf7e2eee9ed35c27567ad"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-003-F1-test-evidence.md",
+      "state": "untracked",
+      "bytes": 2073,
+      "sha256": "1176d6026a2d8f80647a0706fce6ab48d0a276284b24f6048c40755345b62f0d"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-003-auth-authorization.md",
+      "state": "untracked",
+      "bytes": 8852,
+      "sha256": "0843a6490dedb21b404aa26737021a739a81f39b443e239423c264f762eac5cf"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-003-security-review.md",
+      "state": "untracked",
+      "bytes": 4740,
+      "sha256": "1b4408002d7d4cc82c1c01165c6370e7ef99c278d747671312f9c1d3d80a32cb"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-003-test-evidence.md",
+      "state": "untracked",
+      "bytes": 3692,
+      "sha256": "3ee46c0179f2ed4a0940f8c2f4e75001d7c09024fc0003f28be3aa358f070d59"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-004-R1-independent-review.md",
+      "state": "untracked",
+      "bytes": 4283,
+      "sha256": "255e0457b9a5b424ee92196967745f6e098f4b46ff548d8e1f7a534bdd25fda7"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-004-T1-test-evidence.md",
+      "state": "untracked",
+      "bytes": 4498,
+      "sha256": "cf8514e42968a1958868ff957890b5218e953a0a7ae7e56b24d07fc3e5670654"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-004-project-task-workflow.md",
+      "state": "untracked",
+      "bytes": 9113,
+      "sha256": "53ba373da4a5b8290c172a44c83329d4b05b57f5e2778c8192ec2c5028d1b9f5"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-005-R1-security-review.md",
+      "state": "untracked",
+      "bytes": 4097,
+      "sha256": "626fb5a89df14c791f1414e20cd26dcd0d7747d8b399bc746ebdea1c9d8005b8"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-005-T1-test-evidence.md",
+      "state": "untracked",
+      "bytes": 4153,
+      "sha256": "5ba829c2b10bda3dfd2384c25d8fa1f07fc873d4301f24cc96ed84098d093cea"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-005-dashboard-audit-read.md",
+      "state": "untracked",
+      "bytes": 9841,
+      "sha256": "4679d1f2860d8813f4cb08c509777f9d8ebc638358675e2ef5df91b07065eccd"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-006-final-verification.md",
+      "state": "untracked",
+      "bytes": 7814,
+      "sha256": "2b36c42da2239d6811ca685e96a836e7b9e5e0359f8a9e2b218d9b6cbed15708"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-007-R1-independent-review.md",
+      "state": "untracked",
+      "bytes": 3746,
+      "sha256": "36bdbd7566f142b2734097d5c6424a1c8d5c8aef598b7e830a1203e02cace44d"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-007-T1-test-evidence.md",
+      "state": "untracked",
+      "bytes": 3693,
+      "sha256": "82b0a1a03253e043ab2f3441e1d0dc99529e255df38421dd9f089343704afa33"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-007-project-workbench.md",
+      "state": "untracked",
+      "bytes": 7279,
+      "sha256": "352e6a20ef54d1402f83b0ff0a0d8bf5d2a14d8808d2630b17fa9f186ce3df39"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-008-R1-independent-review.md",
+      "state": "untracked",
+      "bytes": 1929,
+      "sha256": "da737a93db89e53a2837c550f9dc51b04a0ec9508c4ba933afa293bfc7610026"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-008-T1-test-evidence.md",
+      "state": "untracked",
+      "bytes": 2533,
+      "sha256": "ec56f33f0276724930b66181fc302218754ad23f39e5160334a49998688c0f10"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-008-ac10-department-scope-integration.md",
+      "state": "untracked",
+      "bytes": 8937,
+      "sha256": "1788f6e85957950f572b6f8c99a7eab2fb51c5c5828dd10bb57f67b06c608d63"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-009-R1-independent-review.md",
+      "state": "untracked",
+      "bytes": 4217,
+      "sha256": "997d8ddbb06ca6932731accfebd1b1fc66523b99c96bf158e15adc2872c36746"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-009-T1-test-evidence.md",
+      "state": "untracked",
+      "bytes": 8410,
+      "sha256": "e7025ba48ab73edcbe654eb6a74bf0b9a7bdec91a7964d42fa40f2e30b1ff17d"
+    },
+    {
+      "path": ".team/tasks/CHPMIS-009-baseline-readiness.md",
+      "state": "untracked",
+      "bytes": 6207,
+      "sha256": "c7a191aae3b726e158ea42aade4885271d1987982828297ccfda3677b83d97e9"
+    },
+    {
+      "path": ".team/tasks/HERMES-SMOKE-001.md",
+      "state": "untracked",
+      "bytes": 5276,
+      "sha256": "b640436a38da1fb7daa80b5070f192a512899ec0272e0a4661a99fcd13e2ea2b"
+    },
+    {
+      "path": ".team/tasks/HERMES-SMOKE-002.md",
+      "state": "untracked",
+      "bytes": 4500,
+      "sha256": "7992c28264dc0fbd97ed55450ea2ecbfcf1e953104b9b0b070a5be747baa54ff"
+    },
+    {
+      "path": ".team/tasks/OPENCODE-SMOKE-003.md",
+      "state": "untracked",
+      "bytes": 4169,
+      "sha256": "fe7645ce2b5c2752c8ef3609502f0679da7817b95f9f9889f072212f005dc3f3"
+    },
+    {
+      "path": "ACCEPTANCE.md",
+      "state": "tracked",
+      "bytes": 7409,
+      "sha256": "c255b1c6ebcab9269015cfaf0c89daf87637ffdb38423bdb7a688b4703e237fd"
+    },
+    {
+      "path": "AGENTS.md",
+      "state": "tracked",
+      "bytes": 2478,
+      "sha256": "1e87de8a619f7a993e4116e35cdc6344391ccaa73dd878143d6b5cbfbcb1413d"
+    },
+    {
+      "path": "OPEN_QUESTIONS.md",
+      "state": "tracked",
+      "bytes": 7243,
+      "sha256": "10b226e8bf511488064080b5ac412e27c63804cbff8d77433a1277076904e098"
+    },
+    {
+      "path": "PLAN.md",
+      "state": "tracked",
+      "bytes": 5308,
+      "sha256": "ca3657dfb6b13d1f181791586b1a662d5fa41d2f2965b2decc37497f6bcca3a3"
+    },
+    {
+      "path": "README.md",
+      "state": "tracked",
+      "bytes": 5836,
+      "sha256": "7ca410aa2b10b46b1dafa87609b547edfc7daf5cbbfabe612bc4cdd41fdb9074"
+    },
+    {
+      "path": "TASKS.md",
+      "state": "tracked",
+      "bytes": 6822,
+      "sha256": "598157cb9475cfa941b237e29a67240d6e33b3941fe88c68159a6c04888f0125"
+    },
+    {
+      "path": "backend/.dockerignore",
+      "state": "untracked",
+      "bytes": 56,
+      "sha256": "8a32bb85c45ad5dc45b0767a4dc6be98f6fc842fe8cfe8977792ff83b5dd8bf9"
+    },
+    {
+      "path": "backend/Dockerfile",
+      "state": "untracked",
+      "bytes": 317,
+      "sha256": "5663ea229e5b7e43b029fb99c4c2eefdac0936143aafa3eb4984b2e7e9081910"
+    },
+    {
+      "path": "backend/alembic.ini",
+      "state": "untracked",
+      "bytes": 66,
+      "sha256": "1448cfbef9aa5c0f6f1f5b5a2198fc7efe51b3d65709db8d668d2f9f8dffc915"
+    },
+    {
+      "path": "backend/alembic/env.py",
+      "state": "untracked",
+      "bytes": 921,
+      "sha256": "be407120ad5f9c10739fb84be327e1799c6868da068002ec758f2a61e918d484"
+    },
+    {
+      "path": "backend/alembic/script.py.mako",
+      "state": "untracked",
+      "bytes": 440,
+      "sha256": "67042994cfc495007c508ccae15e44d21057d90222461630f9bc04d3657f5f6d"
+    },
+    {
+      "path": "backend/alembic/versions/0001_empty_baseline.py",
+      "state": "untracked",
+      "bytes": 234,
+      "sha256": "e27c0f1354906dc4c33ed854fff12d8c4c4db0e338bf4f92f50c994563fc4141"
+    },
+    {
+      "path": "backend/alembic/versions/0002_auth_foundation.py",
+      "state": "untracked",
+      "bytes": 3610,
+      "sha256": "8638c104b8b1dcfa3c57a58e37f066f044413c1ec6beff91e1f281cda3d90632"
+    },
+    {
+      "path": "backend/alembic/versions/0003_system_admin_requests.py",
+      "state": "untracked",
+      "bytes": 1741,
+      "sha256": "bd0c7ad804bad5f7e0dc50c48e2d16958f9150e0a5e8003e7d828e4d61a6b685"
+    },
+    {
+      "path": "backend/alembic/versions/0004_projects_tasks_audit.py",
+      "state": "untracked",
+      "bytes": 6389,
+      "sha256": "76867ece057d5c7d4ea83e009675978797fe7c78145e00abd28fa0279f407559"
+    },
+    {
+      "path": "backend/app/__init__.py",
+      "state": "untracked",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/auth/__init__.py",
+      "state": "untracked",
+      "bytes": 73,
+      "sha256": "9babbaf0cdd711db87ec6622a53f6fbde2e5cbc4cc94ad73698528dad4792260"
+    },
+    {
+      "path": "backend/app/auth/models.py",
+      "state": "untracked",
+      "bytes": 4606,
+      "sha256": "24a592bec7c16bfefb6ae613c064a0ef7ac7c5b0b2129372f7d0856b13bd873c"
+    },
+    {
+      "path": "backend/app/auth/oidc.py",
+      "state": "untracked",
+      "bytes": 9905,
+      "sha256": "c9f7300b870a5e376886d326d66d3b07508d8cb2da07de2c3e27e03785d62f39"
+    },
+    {
+      "path": "backend/app/auth/policy.py",
+      "state": "untracked",
+      "bytes": 6868,
+      "sha256": "5bb244aa8b0e550bbd81e0bfb56f45ac472820fdaa17018a066e1520752aace7"
+    },
+    {
+      "path": "backend/app/auth/routes.py",
+      "state": "untracked",
+      "bytes": 11439,
+      "sha256": "d1aa17b426df272e0f4ab2fb4b117d3d0101f2e4cc3eb1b8b95ba8db6ac1921b"
+    },
+    {
+      "path": "backend/app/auth/session.py",
+      "state": "untracked",
+      "bytes": 3454,
+      "sha256": "e6898c11f6412e9b5cc280fa48a9c33117dcbfb30660b0e4e71f9896b8823f74"
+    },
+    {
+      "path": "backend/app/config.py",
+      "state": "untracked",
+      "bytes": 3032,
+      "sha256": "76aff577c15f2e39d6bd004fc8131eec03a976c403b6dfe4d7072355f5d44bd6"
+    },
+    {
+      "path": "backend/app/database.py",
+      "state": "untracked",
+      "bytes": 1468,
+      "sha256": "9107e6cb3a10b06cf9750181b15ad5ea2fb48cd12acb7354eceaedd4e6a92d0a"
+    },
+    {
+      "path": "backend/app/main.py",
+      "state": "untracked",
+      "bytes": 1615,
+      "sha256": "2eff8e8840806ad78ff994e7d5938238f7011d9abc3cf48c30bf022ff8b55245"
+    },
+    {
+      "path": "backend/app/projects/__init__.py",
+      "state": "untracked",
+      "bytes": 63,
+      "sha256": "1ee978104c591179c4b95977a590301418e083e459de004c6a4fc273dbe11da2"
+    },
+    {
+      "path": "backend/app/projects/models.py",
+      "state": "untracked",
+      "bytes": 4668,
+      "sha256": "a4028a596f58fbce0c5ff6f937743f70975600e9d3235099853acd79a2a95e9e"
+    },
+    {
+      "path": "backend/app/projects/routes.py",
+      "state": "untracked",
+      "bytes": 10617,
+      "sha256": "c7e16c9bd8ac59936486b9294f57e468b6c9c3eea8d1122c304042b8b19bc06d"
+    },
+    {
+      "path": "backend/app/projects/schemas.py",
+      "state": "untracked",
+      "bytes": 3092,
+      "sha256": "a037761189fad93647946d9d90d07b22cd0395be1f3520e375cc93d34243a9df"
+    },
+    {
+      "path": "backend/app/projects/service.py",
+      "state": "untracked",
+      "bytes": 25031,
+      "sha256": "6419709fdc2ea6972920f0af9f5098bab0a9178a56a98e7b501a7be8f4abd1ce"
+    },
+    {
+      "path": "backend/constraints.txt",
+      "state": "untracked",
+      "bytes": 748,
+      "sha256": "47cdf0985af10e113aa56a80302694dc8055d7c3e034332c0d7fc710c29a22f5"
+    },
+    {
+      "path": "backend/pyproject.toml",
+      "state": "untracked",
+      "bytes": 166,
+      "sha256": "037589cef24508e427af5390b8c5561ccc73c9f5107c12bc16481dfe0f0da49a"
+    },
+    {
+      "path": "backend/requirements-dev.txt",
+      "state": "untracked",
+      "bytes": 61,
+      "sha256": "67f71ce21e44cbd4d3968845f40a8a65669bdf471c49b94b0b0607520a804e43"
+    },
+    {
+      "path": "backend/requirements.txt",
+      "state": "untracked",
+      "bytes": 174,
+      "sha256": "a5cfaf48bf1d55d70dd613799d5c39e760a9a2a9e7ff989e457f404bea8c37a1"
+    },
+    {
+      "path": "backend/tests/test_audit_atomicity.py",
+      "state": "untracked",
+      "bytes": 7764,
+      "sha256": "7366832e34c33f0f4f2bee7ca00a36812cc77cf4e9d81a272cc85c08b38e53a6"
+    },
+    {
+      "path": "backend/tests/test_auth_oidc.py",
+      "state": "untracked",
+      "bytes": 13309,
+      "sha256": "850e4ff4fd84980e7edc325fbfd055afeff943c02b525ae27e24a1a57ca314cd"
+    },
+    {
+      "path": "backend/tests/test_auth_policy.py",
+      "state": "untracked",
+      "bytes": 17198,
+      "sha256": "f0b191e7ac5603f76ac40198f9da2c225f40c696b1877a381d6a66cfee994715"
+    },
+    {
+      "path": "backend/tests/test_auth_remediation.py",
+      "state": "untracked",
+      "bytes": 13100,
+      "sha256": "8971582d32b1e1b0ef0c9dac98c44da9bc7d70e5e79eec9d393d3b1b039f43e0"
+    },
+    {
+      "path": "backend/tests/test_auth_session.py",
+      "state": "untracked",
+      "bytes": 9263,
+      "sha256": "2a94bc02c4305281abb89e9dca00fd60f6d9ea059fd9b28adf5dc794405ce58e"
+    },
+    {
+      "path": "backend/tests/test_dashboard_audit.py",
+      "state": "untracked",
+      "bytes": 33524,
+      "sha256": "fbd0512c8425142c61d130379f3cb81404866602f7f8d1521e143814d5c646b8"
+    },
+    {
+      "path": "backend/tests/test_health.py",
+      "state": "untracked",
+      "bytes": 1807,
+      "sha256": "2e9a6e68363b783069410fcf348be980f318c725f928e2d8cf46a03f0eacf5ab"
+    },
+    {
+      "path": "backend/tests/test_postgresql.py",
+      "state": "untracked",
+      "bytes": 1238,
+      "sha256": "3e8ffaca8c2c7f64c185de3af988f027a25501232b0a852035a2f8d8674bd0f5"
+    },
+    {
+      "path": "backend/tests/test_projects.py",
+      "state": "untracked",
+      "bytes": 20779,
+      "sha256": "f7d01df36f3193fa754fb6101ec69330c0de5018606d11fca94a65c7d6e4f032"
+    },
+    {
+      "path": "backend/tests/test_tasks_workflow.py",
+      "state": "untracked",
+      "bytes": 16361,
+      "sha256": "fd6704247d0eb7f4aed6162f682456913d7564edea03b9f124d7cf29861a545e"
+    },
+    {
+      "path": "backend/uv.lock",
+      "state": "untracked",
+      "bytes": 52,
+      "sha256": "96599229fba386c9268987794da072036c3f16443f7b828004fc56c8d9b00b27"
+    },
+    {
+      "path": "compose.yaml",
+      "state": "untracked",
+      "bytes": 1246,
+      "sha256": "be4ebfb568a7b8d275b31372b2caca8ed6bb91d973809aca1309f937fcbd36ca"
+    },
+    {
+      "path": "docs/MISSION.md",
+      "state": "tracked",
+      "bytes": 3601,
+      "sha256": "5b85dc6a306cf530a8668f6eedeada62e3ba2608692f3ec5221c288d987088e2"
+    },
+    {
+      "path": "docs/architecture/API_CONTRACT.md",
+      "state": "tracked",
+      "bytes": 2894,
+      "sha256": "a3ee0447c038cc5615efaba25a726e264e61b2ee239ff4d66d73d03201d63067"
+    },
+    {
+      "path": "docs/architecture/ARCHITECTURE.md",
+      "state": "tracked",
+      "bytes": 2594,
+      "sha256": "fe7dc689168ed242bc4e58b5fd680fbab9313f68630f42e89f12e20f005930a7"
+    },
+    {
+      "path": "docs/architecture/DATA_MODEL.md",
+      "state": "tracked",
+      "bytes": 2782,
+      "sha256": "77fc1e7fa11e1b9f5c711b826688f4b45fc060bc217c3310a386e5d91593ad24"
+    },
+    {
+      "path": "docs/legal/LEGAL_RULES_REGISTER.md",
+      "state": "tracked",
+      "bytes": 849,
+      "sha256": "5d6e4c424dc1c188f653dea69a541b02337f3863f0754f7fd035120213cc4353"
+    },
+    {
+      "path": "docs/product/PRD.md",
+      "state": "tracked",
+      "bytes": 3321,
+      "sha256": "419704d179a02e1ca306b98e93839fd990cee42dde70726c35e6ba6051044ba0"
+    },
+    {
+      "path": "docs/product/USER_ROLES.md",
+      "state": "tracked",
+      "bytes": 2267,
+      "sha256": "e55a378e7c0817e293895172a97c054064761f9a2a28f2a770684ecc6b62192a"
+    },
+    {
+      "path": "docs/product/USER_STORIES.md",
+      "state": "tracked",
+      "bytes": 1813,
+      "sha256": "370c281406dcbd809c516f0ae1b33de79a1c29b9bbfa49d671f87eb06ea6aa37"
+    },
+    {
+      "path": "docs/security/SECURITY_MODEL.md",
+      "state": "tracked",
+      "bytes": 3345,
+      "sha256": "70340521a45973bfc9e7a5ebf9bd3eb2f6973bc9c9f22e520266bb72c6f0888c"
+    },
+    {
+      "path": "docs/security/THREAT_MODEL.md",
+      "state": "tracked",
+      "bytes": 1884,
+      "sha256": "606b31f5597526838996e8ac90132efa13565fd78db1622a77ef7507b9ec058c"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-29-chanh-hung-pmis-vertical-slice.md",
+      "state": "tracked",
+      "bytes": 13099,
+      "sha256": "19cd380d569ef126061c039af7d30c7fb8d59bfdfa8748ffad105012fe547d69"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-30-chpmis-007-project-workbench.md",
+      "state": "untracked",
+      "bytes": 5330,
+      "sha256": "97d8b46e11376cf41be39285554008311ca3036bc0a5d4e5ed9b82b487a9591d"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-30-chpmis-008-ac10-department-scope-integration.md",
+      "state": "untracked",
+      "bytes": 4203,
+      "sha256": "e61e1838eae2ba62bff32f9d0db0c236646171be75f36ca25752373d38bb4f84"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-31-chpmis-009-baseline-readiness.md",
+      "state": "untracked",
+      "bytes": 2176,
+      "sha256": "7bf4c9a19dd12e55122653615f055decd2d2fae98ce8f950e9bd9169d94dc197"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-10-30-chpmis-008-ac10-department-scope-integration-design.md",
+      "state": "untracked",
+      "bytes": 2661,
+      "sha256": "346f4b1c7208a6af7a4359206da7627a4f14b3d8039f02ea85c27bd74cf87864"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-10-30-project-workbench-design.md",
+      "state": "untracked",
+      "bytes": 6396,
+      "sha256": "2ddad960ca72869df6b9c394e7fa2c461269f99a24e779965ed7cebea4d512bd"
+    },
+    {
+      "path": "docs/workflows/WORKFLOW_CATALOG.md",
+      "state": "tracked",
+      "bytes": 1744,
+      "sha256": "a5a57e435921543918291be083ae118c0261521e622ff37fc28f56a6aeaa9453"
+    },
+    {
+      "path": "frontend/.dockerignore",
+      "state": "untracked",
+      "bytes": 75,
+      "sha256": "419ce77cdb5f406db8d4d904a16c6f5a2b557de6f61d504c99b019b56210a124"
+    },
+    {
+      "path": "frontend/Dockerfile",
+      "state": "untracked",
+      "bytes": 169,
+      "sha256": "7ecfd4d4802f56153fd908684a7ceca473f2e2f754fdbb5ac5ce2874ab3c367f"
+    },
+    {
+      "path": "frontend/components.json",
+      "state": "untracked",
+      "bytes": 339,
+      "sha256": "b9aa834e6468eef974d06ae93ffeb483de7358b01fa89def56a8a7eef7d15e70"
+    },
+    {
+      "path": "frontend/e2e/shell.spec.ts",
+      "state": "untracked",
+      "bytes": 236,
+      "sha256": "0fe88f568b9833941c1299349b115a7bef49de181648d191e55939c343b407a3"
+    },
+    {
+      "path": "frontend/eslint.config.js",
+      "state": "untracked",
+      "bytes": 689,
+      "sha256": "c6b2d55783a2b8018df229b18f7696b507088b978bc7d69e68e7f0a0b3ac8dfc"
+    },
+    {
+      "path": "frontend/index.html",
+      "state": "untracked",
+      "bytes": 304,
+      "sha256": "96c6fc897f97cd2d86e5db89111809a9c0fd3928f01b0ba98a9eff04dc24e033"
+    },
+    {
+      "path": "frontend/package-lock.json",
+      "state": "untracked",
+      "bytes": 155651,
+      "sha256": "69d061f578cda66aec6ae1ad923851ec3b4b92f6e63d6e1fcc3250e897bed39e"
+    },
+    {
+      "path": "frontend/package.json",
+      "state": "untracked",
+      "bytes": 1151,
+      "sha256": "b247cf655e0816e283837e7eca474b189eb24004fc932037560a26a30f020cc7"
+    },
+    {
+      "path": "frontend/playwright.config.ts",
+      "state": "untracked",
+      "bytes": 271,
+      "sha256": "88c2f075cd66b06e8e85b841a6c1a9258acf7bd83850abf80f6a5ca1f3199d47"
+    },
+    {
+      "path": "frontend/src/App.test.tsx",
+      "state": "untracked",
+      "bytes": 10942,
+      "sha256": "660e070e51327f902c6a555f7b0871a5024a9d4026fd2a6600704fb91cf1fc80"
+    },
+    {
+      "path": "frontend/src/App.tsx",
+      "state": "untracked",
+      "bytes": 739,
+      "sha256": "85355761011213d04820eb926bc6582992681f86406fae9d1e635ce297f8caac"
+    },
+    {
+      "path": "frontend/src/ProjectWorkbench.test.tsx",
+      "state": "untracked",
+      "bytes": 21313,
+      "sha256": "bd317198ad5f303a32cb2d9a3ac56c949d2e969ed3bc5e5880d532d065011a4e"
+    },
+    {
+      "path": "frontend/src/components/ProjectTaskManager.tsx",
+      "state": "untracked",
+      "bytes": 16491,
+      "sha256": "17da34867dc0228edd2b7d06928f991e3811bc7acf4ffb61a1820257396b7683"
+    },
+    {
+      "path": "frontend/src/components/ProjectWorkbench.tsx",
+      "state": "untracked",
+      "bytes": 54766,
+      "sha256": "cbe49da869e8bcc7c4ded5b1c68fc365d0c9b813400e459bbaccfeb0a75b2257"
+    },
+    {
+      "path": "frontend/src/components/ui/button.tsx",
+      "state": "untracked",
+      "bytes": 1026,
+      "sha256": "909f2de8bbe9d3d4490b78c9a4311512c6dad0ab0f950a9df82a343a1cfcdc39"
+    },
+    {
+      "path": "frontend/src/index.css",
+      "state": "untracked",
+      "bytes": 496,
+      "sha256": "65810c573fc3fffbfaace81bdbab2f764a6b1635a16d3615f19a4af6177f9fc5"
+    },
+    {
+      "path": "frontend/src/lib/overdue.ts",
+      "state": "untracked",
+      "bytes": 309,
+      "sha256": "44ba9d5aa44fcc3f41464ab4ab4217180ba2a89974d9cfaf37f09b1831d249b6"
+    },
+    {
+      "path": "frontend/src/lib/utils.ts",
+      "state": "untracked",
+      "bytes": 166,
+      "sha256": "e46429536f43f5910f5b2b0c50bb2769b510a4558bb4b5d20a3b0a9091dbf7c3"
+    },
+    {
+      "path": "frontend/src/main.tsx",
+      "state": "untracked",
+      "bytes": 213,
+      "sha256": "07ddc2935ae2240e96f17208c752f88970f60ec80d5a04ccbaf6f2e50cf7b28f"
+    },
+    {
+      "path": "frontend/src/test/setup.ts",
+      "state": "untracked",
+      "bytes": 146,
+      "sha256": "e20f6c79ce7842f29f0dd93957e8230a5cbb3b5f6ee691fef96d4f393b964cb3"
+    },
+    {
+      "path": "frontend/tsconfig.json",
+      "state": "untracked",
+      "bytes": 470,
+      "sha256": "3d475c05b62c9e463f885420d72e50d95d9d168c8716c7e4c58c0706e5492511"
+    },
+    {
+      "path": "frontend/vite.config.ts",
+      "state": "untracked",
+      "bytes": 610,
+      "sha256": "d23677f8b8f06757fdad1e0d1ffcd025aafbcf9a2868434f0b2ea20e18b0930a"
+    },
+    {
+      "path": "scripts/audit-baseline.mjs",
+      "state": "untracked",
+      "bytes": 5925,
+      "sha256": "ebc6313f388def2f97c00e2e716b9e88e6b0d2728b3a43486a1e008c423bfee9"
+    },
+    {
+      "path": "skills-lock.json",
+      "state": "tracked",
+      "bytes": 300,
+      "sha256": "965c58a945d84573c57978328cc6cf1df6dad790b3452347532a48948703e60c"
+    }
+  ]
+}

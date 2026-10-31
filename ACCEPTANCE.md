@@ -1,24 +1,40 @@
 # Acceptance Criteria — First Vertical Slice
 
-All criteria start `NOT_STARTED`. A criterion becomes `PASS` only after its specified evidence exists and an independent reviewer accepts the result. Policy-dependent criteria remain blocked until their Human Gate is approved.
+Criteria use `PASS` only when specified evidence exists and an independent reviewer accepts the result. Unverified infrastructure checks remain `NOT_VERIFIED`. The project owner approved HG1–HG5 for the local first slice on 2026-10-30.
 
 | ID | Acceptance criterion | Planned evidence | Status |
 |---|---|---|---|
-| AC-01 | Developer can start the synthetic-data stack locally with Docker Compose; all published ports bind to `127.0.0.1` | `docker compose config`, `docker compose up` output and listener/bind inspection | NOT_STARTED |
-| AC-02 | API liveness and readiness endpoints distinguish process from database readiness | Backend tests and HTTP response evidence | NOT_STARTED |
-| AC-03 | Alembic migration applies to an empty PostgreSQL database and schema can be inspected | Migration command output and migration tests | NOT_STARTED — Human Gate for schema |
-| AC-04 | Frontend and backend expose real repeatable test/lint commands and CI runs them without production deployment | CI run URL/logs and local command output | NOT_STARTED |
-| AC-05 | Approved user can sign in; unauthenticated/inactive user cannot access protected endpoints | Auth integration tests | NOT_STARTED — Human Gate for identity/session |
-| AC-06 | Authorized user can create and read a project with approved minimum fields | API/UI tests and record evidence | NOT_STARTED — Human Gate for project fields |
-| AC-07 | Authorized project user can assign staff; unauthorized user cannot | Positive/negative API tests | NOT_STARTED — Human Gate for authorization matrix |
-| AC-08 | Authorized participant can create and assign a task within an authorized project | API/UI tests | NOT_STARTED — Human Gate for model/permissions |
-| AC-09 | Only approved task state transitions are accepted; invalid transitions are rejected | Workflow unit/integration tests | NOT_STARTED — Human Gate for workflow |
-| AC-10 | Cross-project and cross-department access attempts are denied on reads, writes, and lists | Security integration tests including guessed IDs | NOT_STARTED — Human Gate for scope matrix |
-| AC-11 | Dashboard totals/lists only include authorized projects and tasks | API tests with mixed authorized/unauthorized fixtures | NOT_STARTED — Human Gate for scope matrix |
-| AC-12 | Create, assignment, and status changes produce audit records with approved fields | Integration tests and audit query evidence | NOT_STARTED — Human Gate for audit policy |
-| AC-13 | Authorized reviewer can inspect the relevant audit trail; unauthorized user cannot | Positive/negative audit API tests | NOT_STARTED — Human Gate for audit access |
-| AC-14 | E2E path completes sign in → create project → assign staff → task update → dashboard → audit | Playwright result and captured test report | NOT_STARTED — depends on AC-05–13 |
-| AC-15 | No real agency data/secrets are in fixtures/Git; external AI access is absent from MVP | Repo secret scan/diff review and config inspection | NOT_STARTED |
+| AC-01 | Developer can start the synthetic-data stack locally with Docker Compose; all published ports bind to `127.0.0.1` | Compose config/up, HTTP health and actual published bindings | PASS — CHPMIS-010 actual config/build/up exit 0, API live/ready and frontend HTTP 200; ports 8000/5432/5173 inspected as 127.0.0.1 only. Hermes Reviewer independently inspected Compose and accepted Coordinator runtime evidence; did not rerun runtime. |
+| AC-02 | API liveness and readiness endpoints distinguish process from database readiness | Backend health tests, including DB response and dependency failure | PASS — health/readiness behavior was independently tested in CHPMIS-002 and included in subsequent backend suites; live PostgreSQL stack verification remains under AC-01/03 |
+| AC-03 | Alembic migration chain applies to an initially empty PostgreSQL database and approved schema can be inspected | Live PostgreSQL migration test and inspected table list | PASS — CHPMIS-010 dedicated pmis_test initially had zero public tables; focused test 1 passed, full suite 63 passed/no skips, exit 0; actual revision 0004_projects_tasks_audit and exact ten tables inspected. Hermes Reviewer APPROVED captured runtime evidence; not a second live run. |
+| AC-04 | Frontend and backend expose repeatable test/lint commands and CI runs them without production deployment | Local command output; CI run logs; workflow inspection | NOT_VERIFIED — local backend/frontend checks and workflow inspection pass; remote CI has not run |
+| AC-05 | Approved user can sign in; unauthenticated/inactive user cannot access protected endpoints | Auth integration tests | NOT_VERIFIED — local OIDC/provider implementation and auth tests exist, but live synthetic Keycloak sign-in and actual agency IdP sign-in have not been verified. CHPMIS-011 trust hardening and runtime gates remain open. |
+| AC-06 | Authorized user can create and read a project with approved minimum fields | API/UI tests and record evidence | PASS — CHPMIS-004: project create/list/read and explicit membership tests; Worker + independent Tester checks pass; Reviewer APPROVED |
+| AC-07 | Authorized project user can assign staff; unauthorized user cannot | Positive/negative API tests | PASS — CHPMIS-004: in-scope PM member assignment, role/target validation, System Admin denial; independently tested and reviewed |
+| AC-08 | Authorized participant can create and assign a task within an authorized project | API/UI tests | PASS — CHPMIS-004: project-scoped task create/assignment and membership checks independently tested and reviewed |
+| AC-09 | Only approved task state transitions are accepted; invalid transitions are rejected | Workflow unit/integration tests | PASS — CHPMIS-004: approved transitions, role boundaries, terminal state, and archive behavior independently tested and reviewed |
+| AC-10 | Cross-project and cross-department access attempts are denied on reads, writes, and lists | Security integration tests including guessed IDs and department-matched nonmembers | PASS — CHPMIS-004 covers guessed IDs/cross-project reads, writes, and lists. CHPMIS-008 verifies a synthetic API case where `User.department == Project.lead_department_id` but no `ProjectMember` row: reads return 404, lists/dashboard omit the project, and valid-CSRF status/archive writes return 404 without state/audit mutation. OpenCode independently reran the focused test (1 passed) and full backend suite (62 passed/1 skipped), both exit 0; Hermes Reviewer APPROVED with zero P1–P3 findings. Two P4 informational notes are recorded in the task pack. |
+| AC-11 | Dashboard totals/lists only include authorized projects and tasks | API tests with mixed authorized/unauthorized fixtures | PASS — CHPMIS-005: scoped totals/status/overdue counts, mixed membership tests; independent Tester PASS and Reviewer APPROVED |
+| AC-12 | Create, assignment, and status changes produce audit records with approved fields | Integration tests and audit query evidence | PASS — CHPMIS-004 independently verifies transactional writes/rollback; CHPMIS-005 independently verifies scoped read and field allowlist; both Reviewers APPROVED |
+| AC-13 | Authorized reviewer can inspect the relevant audit trail; unauthorized user cannot | Positive/negative audit API tests | PASS — CHPMIS-005: assigned PM/Auditor allowed; Member/unassigned/admin/guessed requests fail closed; Tester PASS; Reviewer APPROVED |
+| AC-14 | E2E path completes sign in → create project → assign staff → task update → dashboard → audit | Playwright result and captured test report | NOT_VERIFIED — real IdP is unselected; live browser SSO path cannot be verified without it, and no fake login is permitted |
+| AC-15 | No real agency data/secrets are in fixtures/Git; external AI access is absent from MVP | Independent candidate-file/config review, ignore-rule inspection | PASS — placeholders only; no real records or apparent secrets; external AI integration absent |
 
-## Commands
-No project verification commands exist yet. The first foundation task must add scripts and CI, then update this document with their exact command strings. Planned Docker checks above are not evidence until run.
+## Latest recorded verification evidence
+
+CHPMIS-010 executed real local Compose/PostgreSQL checks and obtained independent evidence review approval. Acceptance is 12 PASS / 3 NOT_VERIFIED (AC-04/05/14). CHPMIS-009 remains a historical checkpoint snapshot.
+
+| Command | Recorded result | Evidence source |
+|---|---|---|
+| `.venv/Scripts/python.exe -m pytest -q tests/test_projects.py::test_department_match_without_explicit_project_membership_is_denied_ac10` from backend | 1 passed, 1 warning; exit 0 | OpenCode CHPMIS-008 authorized retry, 2026-10-31 local date |
+| `.venv/Scripts/python.exe -m pytest -q` from backend | 63 passed / 0 skipped / 2 warnings; exit 0 | CHPMIS-010 Coordinator live PostgreSQL run; Hermes evidence review APPROVED. Earlier OpenCode T1 independently recorded 62 passed/1 skipped before runtime setup |
+| `.venv/Scripts/ruff.exe check .` from backend | All checks passed; exit 0 | CHPMIS-008 Worker report; latest independent lint/format evidence is CHPMIS-006 |
+| `.venv/Scripts/ruff.exe check .` and `.venv/Scripts/ruff.exe format --check .` from backend | Exit 0 | CHPMIS-006 independent Tester, 2026-10-30 |
+| `.venv/Scripts/python -m alembic upgrade head --sql` and `.venv/Scripts/python -m alembic downgrade 0004_projects_tasks_audit:0003_system_admin_requests --sql` from backend | Offline SQL generation exit 0; not a live PostgreSQL migration result | CHPMIS-006 independent Tester |
+| `npm --prefix frontend run test -- --run` | 2 files / 15 tests passed; exit 0 | CHPMIS-007 independent Tester, 2026-10-30 |
+| `npm --prefix frontend run lint` and `npm --prefix frontend run build` | Exit 0 | CHPMIS-007 independent Tester |
+| `npm --prefix frontend run test:e2e` | 1 Playwright shell test passed; exit 0; not full authenticated E2E | CHPMIS-007 independent Tester |
+| `docker compose --env-file .env.example -p chpmis010 config --quiet` | Config exit 0; subsequent build/up, migration and health/bind checks passed; see runtime evidence | CHPMIS-010 Coordinator after owner-authorized per-user install, 2026-10-31 |
+| Remote CI and real IdP/browser SSO | NOT_VERIFIED | AC-04/05/14 |
+
+Sources: `.team/tasks/CHPMIS-008-T1-test-evidence.md`, `.team/tasks/CHPMIS-007-T1-test-evidence.md`, `.team/tasks/CHPMIS-006-final-verification.md`, and `.team/ledger.md`. Earlier frontend sandbox attempts failed before execution with `spawn EPERM`; successful retries were recorded separately. PostgreSQL still skips when TEST_DATABASE_URL is absent; CHPMIS-010 supplied a dedicated synthetic database and executed it successfully. New evidence: `.team/tasks/CHPMIS-010-runtime-evidence.md`; review card t_a11e6713/run 32 APPROVED with zero P1/P2/P3. Runtime executed by Coordinator, not independently rerun by Reviewer.
