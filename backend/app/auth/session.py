@@ -100,7 +100,6 @@ def revoke_user_sessions(db: DBSession, user_id: str) -> None:
     sessions = db.query(SessionModel).filter_by(user_id=user_id, is_revoked=False).all()
     for s in sessions:
         s.is_revoked = True
-    db.commit()
 
 
 def validate_csrf(session: SessionModel, csrf_header: str | None) -> None:

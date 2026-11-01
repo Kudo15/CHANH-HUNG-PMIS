@@ -2,11 +2,6 @@ import base64
 import json
 from datetime import datetime, timedelta, timezone
 
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
 from app.auth.models import User, UserRole
 from app.auth.policy import Role
 from app.auth.session import create_session
@@ -16,6 +11,10 @@ from app.main import create_app
 from app.projects.models import AuditEvent, Project, ProjectMember, Task, utc_now
 from app.projects.schemas import TaskStatus
 from app.projects.service import is_task_overdue
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 
 def setup_test_env():
@@ -55,6 +54,38 @@ def create_user_and_session(
             id=f"ur_{user_id}_{role.value}",
             user_id=user.id,
             role=role.value,
+            granted_by="system",
+        )
+        db.add(user_role)
+    db.commit()
+
+    session = create_session(db, user.id, settings)
+    return user, session
+
+
+def create_user_with_roles_and_session(
+    db,
+    settings,
+    user_id: str,
+    email: str,
+    roles: list[Role],
+    is_active: bool = True,
+    department: str | None = None,
+):
+    user = User(
+        id=user_id,
+        sub=f"sub_{user_id}",
+        email=email,
+        name=f"User {user_id}",
+        is_active=is_active,
+        department=department,
+    )
+    db.add(user)
+    for r in roles:
+        user_role = UserRole(
+            id=f"ur_{user_id}_{r.value}",
+            user_id=user.id,
+            role=r.value,
             granted_by="system",
         )
         db.add(user_role)
@@ -918,5 +949,268 @@ def test_no_global_audit_endpoint_ac12():
         assert r1.status_code == 404
         r2 = client.get("/api/v1/audit")
         assert r2.status_code == 404
+    finally:
+        engine.dispose()
+
+
+def test_http_authorization_matrix_dashboard_and_audit_ac17():
+    app, SessionLocal, settings, engine = setup_test_env()
+    try:
+        from app.projects.models import ProjectMember, utc_now
+
+        with SessionLocal() as db:
+            pm1, s_pm1 = create_user_with_roles_and_session(
+                db, settings, "u-d-pm1", "pm1d@corp.local", [Role.PROJECT_MANAGER]
+            )
+            pm2, s_pm2 = create_user_with_roles_and_session(
+                db, settings, "u-d-pm2", "pm2d@corp.local", [Role.PROJECT_MANAGER]
+            )
+            mem1, s_mem1 = create_user_with_roles_and_session(
+                db, settings, "u-d-mem1", "mem1d@corp.local", [Role.MEMBER]
+            )
+            aud1, s_aud1 = create_user_with_roles_and_session(
+                db, settings, "u-d-aud1", "aud1d@corp.local", [Role.AUDITOR]
+            )
+            admin1, s_admin1 = create_user_with_roles_and_session(
+                db, settings, "u-d-admin1", "admin1d@corp.local", [Role.SYSTEM_ADMIN]
+            )
+            sa_pm, s_sa_pm = create_user_with_roles_and_session(
+                db,
+                settings,
+                "u-d-sapm",
+                "sapmd@corp.local",
+                [Role.SYSTEM_ADMIN, Role.PROJECT_MANAGER],
+            )
+            pm_mem, s_pm_mem = create_user_with_roles_and_session(
+                db, settings, "u-d-pmmem", "pmmemd@corp.local", [Role.PROJECT_MANAGER, Role.MEMBER]
+            )
+            pm_aud, s_pm_aud = create_user_with_roles_and_session(
+                db, settings, "u-d-pmaud", "pmaudd@corp.local", [Role.PROJECT_MANAGER, Role.AUDITOR]
+            )
+            mem_aud, s_mem_aud = create_user_with_roles_and_session(
+                db, settings, "u-d-memaud", "memaudd@corp.local", [Role.MEMBER, Role.AUDITOR]
+            )
+            unassigned, s_unassigned = create_user_with_roles_and_session(
+                db, settings, "u-d-unassigned", "unassignedd@corp.local", [Role.PROJECT_MANAGER]
+            )
+            dept_only, s_dept_only = create_user_with_roles_and_session(
+                db, settings, "u-d-dept", "deptd@corp.local", [Role.MEMBER], department="dept-p1"
+            )
+            # User who is PM on P1, but Auditor on P2
+            pm1_aud2, s_pm1_aud2 = create_user_with_roles_and_session(
+                db,
+                settings,
+                "u-d-pm1aud2",
+                "pm1aud2@corp.local",
+                [Role.PROJECT_MANAGER, Role.AUDITOR],
+            )
+
+        client = TestClient(app)
+
+        # PM1 creates P1
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        r_p1 = client.post(
+            "/api/v1/projects",
+            json={"name": "Project P1 Dashboard", "lead_department_id": "dept-p1"},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        assert r_p1.status_code == 201
+        p1_id = r_p1.json()["id"]
+
+        # PM2 creates P2
+        client.cookies.set(settings.session_cookie_name, s_pm2.id)
+        r_p2 = client.post(
+            "/api/v1/projects",
+            json={"name": "Project P2 Dashboard", "lead_department_id": "dept-p2"},
+            headers={"X-CSRF-Token": s_pm2.csrf_token},
+        )
+        assert r_p2.status_code == 201
+        p2_id = r_p2.json()["id"]
+
+        # Tasks on P1
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        client.post(
+            f"/api/v1/projects/{p1_id}/tasks",
+            json={"title": "P1 Task 1"},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        client.post(
+            f"/api/v1/projects/{p1_id}/tasks",
+            json={"title": "P1 Task 2"},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+
+        # Task on P2
+        client.cookies.set(settings.session_cookie_name, s_pm2.id)
+        client.post(
+            f"/api/v1/projects/{p2_id}/tasks",
+            json={"title": "P2 Task 1"},
+            headers={"X-CSRF-Token": s_pm2.csrf_token},
+        )
+
+        # Seed memberships on P1 and P2
+        with SessionLocal() as db:
+            now = utc_now()
+            db.add_all(
+                [
+                    ProjectMember(
+                        id="pm-d-mem1",
+                        project_id=p1_id,
+                        user_id=mem1.id,
+                        role="member",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-d-aud1",
+                        project_id=p1_id,
+                        user_id=aud1.id,
+                        role="auditor",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-d-admin1",
+                        project_id=p1_id,
+                        user_id=admin1.id,
+                        role="project_manager",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-d-sapm",
+                        project_id=p1_id,
+                        user_id=sa_pm.id,
+                        role="project_manager",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-d-pmmem",
+                        project_id=p1_id,
+                        user_id=pm_mem.id,
+                        role="member",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-d-pmaud",
+                        project_id=p1_id,
+                        user_id=pm_aud.id,
+                        role="auditor",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-d-memaud",
+                        project_id=p1_id,
+                        user_id=mem_aud.id,
+                        role="member",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    # pm1_aud2: PM on P1, Auditor on P2
+                    ProjectMember(
+                        id="pm-d-p1aud2-1",
+                        project_id=p1_id,
+                        user_id=pm1_aud2.id,
+                        role="project_manager",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-d-p1aud2-2",
+                        project_id=p2_id,
+                        user_id=pm1_aud2.id,
+                        role="auditor",
+                        assigned_by=pm2.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    # aud1 also on P2
+                    ProjectMember(
+                        id="pm-d-aud1-p2",
+                        project_id=p2_id,
+                        user_id=aud1.id,
+                        role="auditor",
+                        assigned_by=pm2.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                ]
+            )
+            db.commit()
+
+        # 1. GET /api/v1/dashboard/summary
+        # PM1 sees only P1 (total_projects=1, total_tasks=2)
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        d_pm1 = client.get("/api/v1/dashboard/summary").json()
+        assert d_pm1["total_projects"] == 1
+        assert d_pm1["total_tasks"] == 2
+        assert [p["project_id"] for p in d_pm1["projects"]] == [p1_id]
+
+        # Member 1 sees only P1
+        client.cookies.set(settings.session_cookie_name, s_mem1.id)
+        d_mem1 = client.get("/api/v1/dashboard/summary").json()
+        assert d_mem1["total_projects"] == 1
+        assert d_mem1["total_tasks"] == 2
+
+        # PM + Member sees only P1
+        client.cookies.set(settings.session_cookie_name, s_pm_mem.id)
+        d_pm_mem = client.get("/api/v1/dashboard/summary").json()
+        assert d_pm_mem["total_projects"] == 1
+        assert d_pm_mem["total_tasks"] == 2
+
+        # Auditor, System Admin, Multi-role (sa_pm, pm_aud, mem_aud),
+        # unassigned, dept_only -> empty aggregates
+        for s_user in (s_aud1, s_admin1, s_sa_pm, s_pm_aud, s_mem_aud, s_unassigned, s_dept_only):
+            client.cookies.set(settings.session_cookie_name, s_user.id)
+            d_empty = client.get("/api/v1/dashboard/summary").json()
+            assert d_empty["total_projects"] == 0
+            assert d_empty["total_tasks"] == 0
+            assert d_empty["projects"] == []
+
+        # pm1_aud2: PM on P1, Auditor on P2. PM+Auditor intersection denies PROJECT_READ.
+        client.cookies.set(settings.session_cookie_name, s_pm1_aud2.id)
+        d_dual = client.get("/api/v1/dashboard/summary").json()
+        assert d_dual["total_projects"] == 0
+        assert d_dual["total_tasks"] == 0
+        assert d_dual["projects"] == []
+
+        # 2. GET /api/v1/projects/{project_id}/audit-events
+        # PM in scope -> 200
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        assert client.get(f"/api/v1/projects/{p1_id}/audit-events").status_code == 200
+        assert client.get(f"/api/v1/projects/{p2_id}/audit-events").status_code == 404
+
+        # Auditor in scope -> 200
+        client.cookies.set(settings.session_cookie_name, s_aud1.id)
+        assert client.get(f"/api/v1/projects/{p1_id}/audit-events").status_code == 200
+        assert client.get(f"/api/v1/projects/{p2_id}/audit-events").status_code == 200
+
+        # PM + Auditor in scope (both global roles allow audit read; role is auditor) -> 200
+        client.cookies.set(settings.session_cookie_name, s_pm_aud.id)
+        assert client.get(f"/api/v1/projects/{p1_id}/audit-events").status_code == 200
+
+        # Member in scope -> 404
+        client.cookies.set(settings.session_cookie_name, s_mem1.id)
+        assert client.get(f"/api/v1/projects/{p1_id}/audit-events").status_code == 404
+
+        # System Admin (even with synthetic PM role in project) -> 404
+        client.cookies.set(settings.session_cookie_name, s_admin1.id)
+        assert client.get(f"/api/v1/projects/{p1_id}/audit-events").status_code == 404
+
+        # Non-audit multi-roles (sa_pm, pm_mem, mem_aud) -> 404
+        for s_user in (s_sa_pm, s_pm_mem, s_mem_aud, s_unassigned, s_dept_only):
+            client.cookies.set(settings.session_cookie_name, s_user.id)
+            assert client.get(f"/api/v1/projects/{p1_id}/audit-events").status_code == 404
     finally:
         engine.dispose()

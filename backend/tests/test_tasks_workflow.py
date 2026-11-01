@@ -1,8 +1,3 @@
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
 from app.auth.models import User, UserRole
 from app.auth.policy import Role
 from app.auth.session import create_session
@@ -10,6 +5,10 @@ from app.config import Settings
 from app.database import Base
 from app.main import create_app
 from app.projects.models import AuditEvent
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 
 def setup_test_env():
@@ -49,6 +48,38 @@ def create_user_and_session(
             id=f"ur_{user_id}_{role.value}",
             user_id=user.id,
             role=role.value,
+            granted_by="system",
+        )
+        db.add(user_role)
+    db.commit()
+
+    session = create_session(db, user.id, settings)
+    return user, session
+
+
+def create_user_with_roles_and_session(
+    db,
+    settings,
+    user_id: str,
+    email: str,
+    roles: list[Role],
+    is_active: bool = True,
+    department: str | None = None,
+):
+    user = User(
+        id=user_id,
+        sub=f"sub_{user_id}",
+        email=email,
+        name=f"User {user_id}",
+        is_active=is_active,
+        department=department,
+    )
+    db.add(user)
+    for r in roles:
+        user_role = UserRole(
+            id=f"ur_{user_id}_{r.value}",
+            user_id=user.id,
+            role=r.value,
             granted_by="system",
         )
         db.add(user_role)
@@ -442,5 +473,315 @@ def test_archived_project_tasks_are_read_only_ac09():
             headers={"X-CSRF-Token": pm_sess.csrf_token},
         )
         assert r_trans.status_code == 400
+    finally:
+        engine.dispose()
+
+
+def test_http_authorization_matrix_tasks_ac17():
+    app, SessionLocal, settings, engine = setup_test_env()
+    try:
+        from app.projects.models import ProjectMember, utc_now
+
+        with SessionLocal() as db:
+            pm1, s_pm1 = create_user_with_roles_and_session(
+                db, settings, "u-t-pm1", "pm1t@corp.local", [Role.PROJECT_MANAGER]
+            )
+            pm2, s_pm2 = create_user_with_roles_and_session(
+                db, settings, "u-t-pm2", "pm2t@corp.local", [Role.PROJECT_MANAGER]
+            )
+            mem1, s_mem1 = create_user_with_roles_and_session(
+                db, settings, "u-t-mem1", "mem1t@corp.local", [Role.MEMBER]
+            )
+            mem2, s_mem2 = create_user_with_roles_and_session(
+                db, settings, "u-t-mem2", "mem2t@corp.local", [Role.MEMBER]
+            )
+            aud1, s_aud1 = create_user_with_roles_and_session(
+                db, settings, "u-t-aud1", "aud1t@corp.local", [Role.AUDITOR]
+            )
+            admin1, s_admin1 = create_user_with_roles_and_session(
+                db, settings, "u-t-admin1", "admin1t@corp.local", [Role.SYSTEM_ADMIN]
+            )
+            sa_pm, s_sa_pm = create_user_with_roles_and_session(
+                db,
+                settings,
+                "u-t-sapm",
+                "sapmt@corp.local",
+                [Role.SYSTEM_ADMIN, Role.PROJECT_MANAGER],
+            )
+            pm_mem, s_pm_mem = create_user_with_roles_and_session(
+                db, settings, "u-t-pmmem", "pmmemt@corp.local", [Role.PROJECT_MANAGER, Role.MEMBER]
+            )
+            pm_aud, s_pm_aud = create_user_with_roles_and_session(
+                db, settings, "u-t-pmaud", "pmaudt@corp.local", [Role.PROJECT_MANAGER, Role.AUDITOR]
+            )
+            mem_aud, s_mem_aud = create_user_with_roles_and_session(
+                db, settings, "u-t-memaud", "memaudt@corp.local", [Role.MEMBER, Role.AUDITOR]
+            )
+            unassigned, s_unassigned = create_user_with_roles_and_session(
+                db, settings, "u-t-unassigned", "unassignedt@corp.local", [Role.PROJECT_MANAGER]
+            )
+            dept_only, s_dept_only = create_user_with_roles_and_session(
+                db, settings, "u-t-dept", "deptt@corp.local", [Role.MEMBER], department="dept-p1"
+            )
+
+        client = TestClient(app)
+
+        # PM1 creates Project 1
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        r_p1 = client.post(
+            "/api/v1/projects",
+            json={"name": "P1 for Tasks", "lead_department_id": "dept-p1"},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        assert r_p1.status_code == 201
+        p1_id = r_p1.json()["id"]
+
+        # PM2 creates Project 2
+        client.cookies.set(settings.session_cookie_name, s_pm2.id)
+        r_p2 = client.post(
+            "/api/v1/projects",
+            json={"name": "P2 for Tasks", "lead_department_id": "dept-p2"},
+            headers={"X-CSRF-Token": s_pm2.csrf_token},
+        )
+        assert r_p2.status_code == 201
+        assert r_p2.json()["id"] is not None
+
+        # Seed memberships on P1
+        with SessionLocal() as db:
+            now = utc_now()
+            db.add_all(
+                [
+                    ProjectMember(
+                        id="pm-t-mem1",
+                        project_id=p1_id,
+                        user_id=mem1.id,
+                        role="member",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-t-mem2",
+                        project_id=p1_id,
+                        user_id=mem2.id,
+                        role="member",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-t-aud1",
+                        project_id=p1_id,
+                        user_id=aud1.id,
+                        role="auditor",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-t-admin1",
+                        project_id=p1_id,
+                        user_id=admin1.id,
+                        role="project_manager",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-t-sapm",
+                        project_id=p1_id,
+                        user_id=sa_pm.id,
+                        role="project_manager",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-t-pmmem",
+                        project_id=p1_id,
+                        user_id=pm_mem.id,
+                        role="member",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-t-pmaud",
+                        project_id=p1_id,
+                        user_id=pm_aud.id,
+                        role="auditor",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ProjectMember(
+                        id="pm-t-memaud",
+                        project_id=p1_id,
+                        user_id=mem_aud.id,
+                        role="member",
+                        assigned_by=pm1.id,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                ]
+            )
+            db.commit()
+
+        # 1. POST /api/v1/projects/{project_id}/tasks
+        # PM in scope creates task assigned to mem1
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        r_create_task = client.post(
+            f"/api/v1/projects/{p1_id}/tasks",
+            json={"title": "Task 1", "assignee_id": mem1.id},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        assert r_create_task.status_code == 201
+        t1_id = r_create_task.json()["id"]
+
+        # PM in scope creates unassigned task
+        r_create_task2 = client.post(
+            f"/api/v1/projects/{p1_id}/tasks",
+            json={"title": "Task 2"},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        assert r_create_task2.status_code == 201
+        t2_id = r_create_task2.json()["id"]
+
+        # Cross-project PM2 / unassigned PM -> 404
+        client.cookies.set(settings.session_cookie_name, s_pm2.id)
+        assert (
+            client.post(
+                f"/api/v1/projects/{p1_id}/tasks",
+                json={"title": "Cross Project Task"},
+                headers={"X-CSRF-Token": s_pm2.csrf_token},
+            ).status_code
+            == 404
+        )
+
+        client.cookies.set(settings.session_cookie_name, s_unassigned.id)
+        assert (
+            client.post(
+                f"/api/v1/projects/{p1_id}/tasks",
+                json={"title": "Unassigned PM Task"},
+                headers={"X-CSRF-Token": s_unassigned.csrf_token},
+            ).status_code
+            == 404
+        )
+
+        # Non-PM and multi-role in scope cannot create task -> 403
+        for s_user in (s_mem1, s_aud1, s_admin1, s_sa_pm, s_pm_mem, s_pm_aud, s_mem_aud):
+            client.cookies.set(settings.session_cookie_name, s_user.id)
+            assert (
+                client.post(
+                    f"/api/v1/projects/{p1_id}/tasks",
+                    json={"title": "Forbidden Task"},
+                    headers={"X-CSRF-Token": s_user.csrf_token},
+                ).status_code
+                == 403
+            )
+
+        # 2. GET /api/v1/projects/{project_id}/tasks
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        assert len(client.get(f"/api/v1/projects/{p1_id}/tasks").json()) == 2
+
+        client.cookies.set(settings.session_cookie_name, s_mem1.id)
+        assert len(client.get(f"/api/v1/projects/{p1_id}/tasks").json()) == 2
+
+        client.cookies.set(settings.session_cookie_name, s_pm_mem.id)
+        assert len(client.get(f"/api/v1/projects/{p1_id}/tasks").json()) == 2
+
+        for s_user in (s_aud1, s_admin1, s_sa_pm, s_pm_aud, s_mem_aud, s_unassigned, s_dept_only):
+            client.cookies.set(settings.session_cookie_name, s_user.id)
+            assert client.get(f"/api/v1/projects/{p1_id}/tasks").status_code == 404
+
+        # 3. GET /api/v1/tasks/{task_id}
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        assert client.get(f"/api/v1/tasks/{t1_id}").status_code == 200
+
+        client.cookies.set(settings.session_cookie_name, s_mem1.id)
+        assert client.get(f"/api/v1/tasks/{t1_id}").status_code == 200
+
+        client.cookies.set(settings.session_cookie_name, s_pm_mem.id)
+        assert client.get(f"/api/v1/tasks/{t1_id}").status_code == 200
+
+        for s_user in (s_aud1, s_admin1, s_sa_pm, s_pm_aud, s_mem_aud, s_unassigned, s_dept_only):
+            client.cookies.set(settings.session_cookie_name, s_user.id)
+            assert client.get(f"/api/v1/tasks/{t1_id}").status_code == 404
+
+        # 4. PATCH /api/v1/tasks/{task_id}/status
+        # Unassigned / cross-project PM -> 404
+        client.cookies.set(settings.session_cookie_name, s_pm2.id)
+        assert (
+            client.patch(
+                f"/api/v1/tasks/{t1_id}/status",
+                json={"status": "in_progress"},
+                headers={"X-CSRF-Token": s_pm2.csrf_token},
+            ).status_code
+            == 404
+        )
+
+        client.cookies.set(settings.session_cookie_name, s_unassigned.id)
+        assert (
+            client.patch(
+                f"/api/v1/tasks/{t1_id}/status",
+                json={"status": "in_progress"},
+                headers={"X-CSRF-Token": s_unassigned.csrf_token},
+            ).status_code
+            == 404
+        )
+
+        # Member 2 (not assignee of t1) tries transition -> 403
+        client.cookies.set(settings.session_cookie_name, s_mem2.id)
+        assert (
+            client.patch(
+                f"/api/v1/tasks/{t1_id}/status",
+                json={"status": "in_progress"},
+                headers={"X-CSRF-Token": s_mem2.csrf_token},
+            ).status_code
+            == 403
+        )
+
+        # Member 1 tries PM transition (cancelled) on own task -> 403
+        client.cookies.set(settings.session_cookie_name, s_mem1.id)
+        assert (
+            client.patch(
+                f"/api/v1/tasks/{t1_id}/status",
+                json={"status": "cancelled"},
+                headers={"X-CSRF-Token": s_mem1.csrf_token},
+            ).status_code
+            == 403
+        )
+
+        # Auditor, System Admin, Multi-role cannot transition -> 403
+        for s_user in (s_aud1, s_admin1, s_sa_pm, s_pm_mem, s_pm_aud, s_mem_aud):
+            client.cookies.set(settings.session_cookie_name, s_user.id)
+            assert (
+                client.patch(
+                    f"/api/v1/tasks/{t1_id}/status",
+                    json={"status": "in_progress"},
+                    headers={"X-CSRF-Token": s_user.csrf_token},
+                ).status_code
+                == 403
+            )
+
+        # Member 1 transitions own task using ordinary transition (open -> in_progress) -> 200
+        client.cookies.set(settings.session_cookie_name, s_mem1.id)
+        r_mem_trans = client.patch(
+            f"/api/v1/tasks/{t1_id}/status",
+            json={"status": "in_progress"},
+            headers={"X-CSRF-Token": s_mem1.csrf_token},
+        )
+        assert r_mem_trans.status_code == 200
+        assert r_mem_trans.json()["status"] == "in_progress"
+
+        # PM1 transitions t2 (open -> cancelled) using PM transition -> 200
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        r_pm_trans = client.patch(
+            f"/api/v1/tasks/{t2_id}/status",
+            json={"status": "cancelled"},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        assert r_pm_trans.status_code == 200
+        assert r_pm_trans.json()["status"] == "cancelled"
     finally:
         engine.dispose()

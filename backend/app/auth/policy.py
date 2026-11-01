@@ -49,6 +49,7 @@ class ResourceContext:
     project_id: str | None = None
     task_id: str | None = None
     department: str | None = None
+    project_role: str | None = None
 
 
 class ProjectScopeResolver(Protocol):
@@ -68,6 +69,10 @@ class ProjectScopeResolver(Protocol):
         """Check if user is assigned to the specific task."""
         ...
 
+    def get_user_project_role(self, user_id: str, project_id: str) -> str | None:
+        """Resolve user's role on the project if assigned."""
+        ...
+
 
 class DefaultProjectScopeResolver:
     """Default resolver that denies all project-level and task-level lookups."""
@@ -83,6 +88,9 @@ class DefaultProjectScopeResolver:
     def is_user_assigned_to_task(self, user_id: str, task_id: str) -> bool:
         return False
 
+    def get_user_project_role(self, user_id: str, project_id: str) -> str | None:
+        return None
+
 
 class AuthorizationError(Exception):
     """Raised when an authorization check fails."""
@@ -90,51 +98,27 @@ class AuthorizationError(Exception):
     pass
 
 
-def authorize(
+def _is_role_permitted(
+    role: str,
+    act: str,
     principal: Principal,
-    action: str | Action,
-    context: ResourceContext | None = None,
-    resolver: ProjectScopeResolver | None = None,
+    project_id: str | None,
+    task_id: str | None,
+    is_assigned_to_project: bool,
+    res: ProjectScopeResolver,
 ) -> bool:
-    """Enforce approved deny-by-default role and explicit project-scope authorization policy."""
-    if not principal.is_active or not principal.roles:
-        return False
-
-    res = resolver or DefaultProjectScopeResolver()
-    roles = {str(r) for r in principal.roles}
-    act = str(action)
-
-    # 1. System Admin: account/role configuration only; NO implicit business-data access
-    if Role.SYSTEM_ADMIN in roles:
-        if act in (
+    if role == Role.SYSTEM_ADMIN.value:
+        return act in (
             Action.ROLE_GRANT,
             Action.ROLE_REVOKE,
             Action.USER_MANAGE,
             Action.USER_DEPROVISION,
-        ):
-            return True
-        # Strictly deny business-data access for System Admin
-        return False
-
-    # Resolve effective project_id
-    project_id = context.project_id if context else None
-    task_id = context.task_id if context else None
-
-    if project_id is None and task_id is not None:
-        project_id = res.get_project_for_task(task_id)
-
-    # Department membership alone grants no project access
-    # Explicit project assignment is strictly required for project-scoped actions
-    is_assigned_to_project = False
-    if project_id is not None:
-        is_assigned_to_project = res.is_user_assigned_to_project(principal.id, project_id)
-
-    # 2. Project Manager
-    if Role.PROJECT_MANAGER in roles:
+        )
+    if role == Role.PROJECT_MANAGER.value:
         if act == Action.PROJECT_CREATE:
             return True
         if is_assigned_to_project:
-            if act in (
+            return act in (
                 Action.PROJECT_READ,
                 Action.PROJECT_MANAGE,
                 Action.PROJECT_ASSIGN,
@@ -144,28 +128,83 @@ def authorize(
                 Action.TASK_MANAGE,
                 Action.TASK_TRANSITION,
                 Action.AUDIT_READ,
-            ):
-                return True
+            )
         return False
-
-    # 3. Member
-    if Role.MEMBER in roles:
+    if role == Role.MEMBER.value:
         if is_assigned_to_project:
             if act in (Action.PROJECT_READ, Action.TASK_READ):
                 return True
             if act == Action.TASK_UPDATE and task_id is not None:
-                # Member may only update own assigned task
                 return res.is_user_assigned_to_task(principal.id, task_id)
         return False
-
-    # 4. Auditor
-    if Role.AUDITOR in roles:
+    if role == Role.AUDITOR.value:
         if is_assigned_to_project and act == Action.AUDIT_READ:
             return True
         return False
-
-    # Deny by default
     return False
+
+
+def authorize(
+    principal: Principal,
+    action: str | Action,
+    context: ResourceContext | None = None,
+    resolver: ProjectScopeResolver | None = None,
+) -> bool:
+    """Enforce approved deny-by-default role and explicit project-scope authorization policy.
+
+    Follows the owner-selected intersection rule (2026-11-01):
+    allow an action only when every applicable role permits it.
+    For project-scoped endpoints, the action must also be allowed by the user's
+    ProjectMember.role for that project, the user must be explicitly assigned,
+    and task-specific rules still apply.
+    """
+    if not principal.is_active or not principal.roles:
+        return False
+
+    res = resolver or DefaultProjectScopeResolver()
+    roles = [str(r.value if isinstance(r, Role) else r) for r in principal.roles]
+    act = str(action.value if isinstance(action, Action) else action)
+
+    # Resolve effective project_id and task_id
+    project_id = context.project_id if context else None
+    task_id = context.task_id if context else None
+
+    if task_id is not None:
+        task_project_id = res.get_project_for_task(task_id)
+        if task_project_id is None:
+            return False
+        if project_id is not None and project_id != task_project_id:
+            return False
+        project_id = task_project_id
+
+    # Department membership alone grants no project access
+    # Explicit project assignment is strictly required for project-scoped actions
+    is_assigned_to_project = False
+    project_role = getattr(context, "project_role", None) if context else None
+    if project_id is not None:
+        is_assigned_to_project = res.is_user_assigned_to_project(principal.id, project_id)
+        if project_role is None and hasattr(res, "get_user_project_role"):
+            project_role = res.get_user_project_role(principal.id, project_id)
+
+    # 1. Global roles intersection: EVERY applicable role must permit the action
+    for r in roles:
+        if not _is_role_permitted(
+            r, act, principal, project_id, task_id, is_assigned_to_project, res
+        ):
+            return False
+
+    # 2. For project-scoped actions (where project_id is resolved):
+    # The action must also be allowed by the user's ProjectMember.role for that project.
+    if project_id is not None:
+        if not is_assigned_to_project or project_role is None:
+            return False
+        proj_role_str = str(project_role.value if isinstance(project_role, Role) else project_role)
+        if not _is_role_permitted(
+            proj_role_str, act, principal, project_id, task_id, is_assigned_to_project, res
+        ):
+            return False
+
+    return True
 
 
 def grant_system_admin(

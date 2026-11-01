@@ -253,61 +253,134 @@ def approve_system_admin_role_request(
     if Role.SYSTEM_ADMIN not in actor_roles:
         raise HTTPException(status_code=403, detail="Approver must be an active System Admin")
 
-    req = db.query(SystemAdminRequest).filter_by(id=payload.request_id).first()
-    if not req:
-        raise HTTPException(status_code=404, detail="System Admin request not found")
-
-    if req.status != "pending":
-        raise HTTPException(status_code=409, detail=f"Request is already decided ({req.status})")
-
-    # Dual control: Requester and approver must be distinct existing system admins
-    if req.requester_id == actor_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="Requester cannot approve own request; distinct second System Admin required",
+    try:
+        req = (
+            db.query(SystemAdminRequest).filter_by(id=payload.request_id).with_for_update().first()
         )
+        if not req:
+            raise HTTPException(status_code=404, detail="System Admin request not found")
 
-    # Self-grant prevention for approver
-    if req.action == "grant" and req.target_user_id == actor_user.id:
-        raise HTTPException(status_code=403, detail="System Admin cannot self-grant")
+        if req.status != "pending":
+            raise HTTPException(
+                status_code=409, detail=f"Request is already decided ({req.status})"
+            )
 
-    # Apply privilege change
-    if req.action == "grant":
+        # Dual control: Requester and approver must be distinct existing system admins
+        if req.requester_id == actor_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Requester cannot approve own request; distinct second System Admin required"
+                ),
+            )
+
+        # Self-grant prevention for approver
+        if req.action == "grant" and req.target_user_id == actor_user.id:
+            raise HTTPException(status_code=403, detail="System Admin cannot self-grant")
+
+        # Revalidate approver within decision transaction
+        approver = db.query(User).filter_by(id=actor_user.id).populate_existing().first()
+        if not approver or not approver.is_active:
+            raise HTTPException(
+                status_code=403, detail="Approver account is inactive or deprovisioned"
+            )
+
+        approver_role = (
+            db.query(UserRole)
+            .filter(
+                UserRole.user_id == actor_user.id,
+                UserRole.role.in_([Role.SYSTEM_ADMIN.value, "System Admin"]),
+            )
+            .populate_existing()
+            .first()
+        )
+        if not approver_role:
+            raise HTTPException(status_code=403, detail="Approver must be an active System Admin")
+
+        # Revalidate requester within decision transaction
+        requester = db.query(User).filter_by(id=req.requester_id).first()
+        if not requester or not requester.is_active:
+            raise HTTPException(
+                status_code=403, detail="Requester account is inactive or deprovisioned"
+            )
+
+        requester_role = (
+            db.query(UserRole)
+            .filter(
+                UserRole.user_id == req.requester_id,
+                UserRole.role.in_([Role.SYSTEM_ADMIN.value, "System Admin"]),
+            )
+            .first()
+        )
+        if not requester_role:
+            raise HTTPException(
+                status_code=403, detail="Requester is no longer an active System Admin"
+            )
+
+        # Revalidate target user existence
+        target_user = db.query(User).filter_by(id=req.target_user_id).first()
+        if not target_user:
+            raise HTTPException(status_code=404, detail="Target user not found")
+
+        # Revalidate action preconditions and apply privilege change
         existing_grant = (
-            db.query(UserRole).filter_by(user_id=req.target_user_id, role=Role.SYSTEM_ADMIN).first()
+            db.query(UserRole)
+            .filter(
+                UserRole.user_id == req.target_user_id,
+                UserRole.role.in_([Role.SYSTEM_ADMIN.value, "System Admin"]),
+            )
+            .first()
         )
-        if not existing_grant:
+
+        if req.action == "grant":
+            if existing_grant:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Target user already has System Admin role",
+                )
             grant_record = UserRole(
                 user_id=req.target_user_id,
-                role=Role.SYSTEM_ADMIN,
+                role=Role.SYSTEM_ADMIN.value,
                 granted_by=req.requester_id,
                 second_admin_id=actor_user.id,
             )
             db.add(grant_record)
-        revoke_user_sessions(db, req.target_user_id)
-    elif req.action == "revoke":
-        existing_grant = (
-            db.query(UserRole).filter_by(user_id=req.target_user_id, role=Role.SYSTEM_ADMIN).first()
-        )
-        if existing_grant:
+            revoke_user_sessions(db, req.target_user_id)
+        elif req.action == "revoke":
+            if not existing_grant:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Target user does not have System Admin role to revoke",
+                )
             db.delete(existing_grant)
-        revoke_user_sessions(db, req.target_user_id)
+            revoke_user_sessions(db, req.target_user_id)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported request action: {req.action}")
 
-    # Durable audit record update
-    req.status = "approved"
-    req.approver_id = actor_user.id
-    req.decided_at = utc_now()
-    db.commit()
+        # Durable audit record update
+        req.status = "approved"
+        req.approver_id = actor_user.id
+        req.decided_at = utc_now()
+        db.commit()
 
-    return JSONResponse(
-        {
-            "status": "approved",
-            "request_id": req.id,
-            "target_user_id": req.target_user_id,
-            "action": req.action,
-            "role": Role.SYSTEM_ADMIN,
-        }
-    )
+        return JSONResponse(
+            {
+                "status": "approved",
+                "request_id": req.id,
+                "target_user_id": req.target_user_id,
+                "action": req.action,
+                "role": Role.SYSTEM_ADMIN,
+            }
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to process approval decision",
+        ) from None
 
 
 @router.get("/roles/system-admin/requests")

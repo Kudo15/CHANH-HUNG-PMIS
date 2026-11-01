@@ -749,5 +749,144 @@ test(auth): add rollback fault-injection regression test for admin bootstrap
 - Record SQLite-vs-PostgreSQL test scope limitations in worker report
 ```
 
+---
 
+## 14. CHPMIS-016 / CHPMIS-011-W9 Fixed Bootstrap Trust Boundary Evidence
 
+- **Task ID:** CHPMIS-016 (Kanban task `t_fdd31c09`) / CHPMIS-011-W9-HKLM
+- **Role:** Hermes Worker (implementation; sole product-code writer)
+- **Status:** IMPLEMENTATION COMPLETE / AWAITING INDEPENDENT OPENCODE TESTER & HERMES REVIEWER
+- **Prompt Template:** Reused Feature coding template, Onyekachi Ibekwe, prompts.chat ID `cmp1fv5ac0001js04jbj3pxoa`. Modernized for Python/FastAPI Worker, fixed 64-bit HKLM registry trust boundary (`HKLM\SOFTWARE\CHPMIS011LocalSynthetic\TrustedApprovers`), fail-closed process token ACL checks via `AccessCheck` and duplicated `SecurityImpersonation` token, removal of legacy `approver_public_keys` and rejection of caller-selected trust material, atomic receipt and migration 0006 preservation.
+- **Scope Compliance:** Modified only allowlisted files (`backend/app/auth/bootstrap_admins.py`, `backend/app/auth/models.py`, `backend/alembic/versions/0006_bootstrap_trust_boundary.py`, `backend/tests/test_admin_bootstrap.py`) and appended this report. No files outside the allowlist were created or modified. All pre-existing dirty work preserved. No commit, stage, push, deployment, elevation, or host mutation.
+
+### 14.1 TDD Cycle
+
+1. **RED Cycle:**
+   - Added `test_bootstrap_rejects_caller_selected_keys_or_legacy_parameters` to `backend/tests/test_admin_bootstrap.py`.
+   - Executed: `cd backend && .venv/Scripts/python.exe -m pytest -q tests/test_admin_bootstrap.py -k test_bootstrap_rejects_caller_selected_keys_or_legacy_parameters`
+   - Observed RED: `FAILED tests/test_admin_bootstrap.py::test_bootstrap_rejects_caller_selected_keys_or_legacy_parameters - Failed: DID NOT RAISE BootstrapError` because the legacy implementation accepted `approver_public_keys` and legacy parameters.
+2. **Implementation:**
+   - Removed `approver_public_keys`, `environment`, and `target_subs` parameters from `bootstrap_initial_admins` in `backend/app/auth/bootstrap_admins.py`.
+   - Deleted the legacy execution branch entirely.
+   - Enforced fail-closed rejection of any caller-selected parameters or trust material via `**kwargs` check, raising `BootstrapError("Caller-selected parameters or trust material rejected: ...")`.
+   - Enforced mandatory `payload_data` dictionary validation.
+   - Added `test_migration_0006_preserves_0005_and_receipt_immutability` verifying migration 0006 revision chain (`0005_initial_admin_bootstrap` -> `0006_bootstrap_trust_boundary`) and downgrade refusal.
+   - Resolved all line-length and formatting issues across allowlisted files.
+3. **GREEN Cycle:**
+   - Executed: `cd backend && .venv/Scripts/python.exe -m pytest -q tests/test_admin_bootstrap.py`
+   - Observed GREEN: `36 passed in 1.65s`.
+
+### 14.2 Verification Commands and Exact Results
+
+1. **Command 1: Focused Bootstrap Unit Tests**
+   - **Command:** `cd backend && .venv\Scripts\python.exe -m pytest -q tests/test_admin_bootstrap.py`
+   - **Result:** `36 passed in 1.65s`
+   - **Exit code:** `0`
+
+2. **Command 2: Full Backend Test Suite**
+   - **Command:** `cd backend && .venv\Scripts\python.exe -m pytest -q`
+   - **Result:** `126 passed, 2 skipped, 1 warning in 6.08s`
+   - **Exit code:** `0`
+   - *(Note: `test_postgresql.py` skipped because `TEST_DATABASE_URL` is not set; warnings are standard Starlette TestClient deprecation).*
+
+3. **Command 3: Ruff Linter Check**
+   - **Command:** `cd backend && .venv\Scripts\ruff.exe check . ../dev`
+   - **Result:** `All checks passed!`
+   - **Exit code:** `0`
+
+4. **Command 4: Ruff Formatting Check**
+   - **Command:** `cd backend && .venv\Scripts\ruff.exe format --check app/config.py app/auth/bootstrap_admins.py app/auth/models.py tests/test_admin_bootstrap.py`
+   - **Result:** `4 files already formatted`
+   - **Exit code:** `0`
+
+5. **Command 5: Alembic Offline Upgrade SQL Check**
+   - **Command:** `cd backend && .venv\Scripts\python.exe -m alembic upgrade head --sql`
+   - **Result:** Valid SQL generated for all migrations through `0006_bootstrap_trust_boundary`, creating `admin_bootstrap_instance_state`, adding columns to `admin_bootstrap_receipts`, and creating immutability triggers.
+   - **Exit code:** `0`
+
+6. **Command 6: Git Diff Whitespace and Conflict Check**
+   - **Command:** `git diff --check` (from repository root)
+   - **Result:** Clean (no whitespace errors or conflict markers).
+   - **Exit code:** `0`
+
+### 14.3 Authoritative Boundaries and Limitations
+- **Synthetic Test Seam Only:** All tests use `SyntheticRegistryBackend` simulating 64-bit Windows Registry APIs.
+- **Host Guarantees NOT_VERIFIED:** No actual host Registry keys, Windows ACLs, OS elevation, or actual two-account permission checks were executed or modified on this machine. Real host trust-store, two-account, and live runtime guarantees remain `NOT_VERIFIED`.
+
+---
+
+## 15. CHPMIS-016-F2 Owner SID, Exact DACL/ACE, and Win32 ctypes Evidence
+
+- **Task ID:** CHPMIS-016-F2 (Kanban task `t_45bef3b1`)
+- **Role:** Hermes Worker (sole product-code writer)
+- **Status:** IMPLEMENTATION COMPLETE / AWAITING INDEPENDENT OPENCODE VERIFIER & HERMES REVIEWER
+- **Prompt Template:** Reused real prompts.chat "Feature coding template", Onyekachi Ibekwe, ID `cmp1fv5ac0001js04jbj3pxoa`. Modernized for CHPMIS-016-F2: owner SID extraction and validation, exact DACL/ACE structure validation against approved SDDL `O:BA G:SY D:P(A;;KA;;;SY)(A;;KA;;;BA)(A;;KR;;;BU)`, pointer-sized ctypes Win32 bindings with explicit `argtypes` and `restype`, generic mask mapping via `MapGenericMask` before `AccessCheck`, fail-closed handling on invalid/null pointers, resource cleanup, and synthetic test seam.
+- **Scope Compliance:** Modified only allowlisted files (`backend/app/auth/bootstrap_admins.py`, `backend/tests/test_admin_bootstrap.py`, append-only `.team/tasks/CHPMIS-011-worker-report.md`). Preserved all pre-existing dirty work. No commit, stage, push, deployment, elevation, or host mutation.
+- **Owner Decision Applied:** Shared `HKLM\SOFTWARE` gets effective-rights checks only; each CHPMIS task-created key (`SOFTWARE\CHPMIS011LocalSynthetic` and `SOFTWARE\CHPMIS011LocalSynthetic\TrustedApprovers`) must be owned by `BUILTIN\Administrators` (`S-1-5-32-544`). The shared root gets no owner allowlist and no task-key SDDL.
+
+### 15.1 TDD Cycle
+
+1. **RED Cycle:**
+   - Added focused tests in `backend/tests/test_admin_bootstrap.py` for owner SID validation, exact DACL/ACE structural validation, generic mask mapping, and Win32 ctypes prototype declarations.
+   - Executed: `cd backend && .venv\Scripts\python.exe -m pytest -q tests/test_admin_bootstrap.py`
+   - Observed RED: `3 failed, 38 passed in 1.86s`:
+     - `test_registry_rejects_missing_or_invalid_owner_sid_on_task_created_keys`: `Failed: DID NOT RAISE BootstrapError` because owner SID was not yet validated.
+     - `test_registry_exact_dacl_and_ace_validation_on_task_created_keys`: `Failed: DID NOT RAISE BootstrapError` because DACL/ACE structure was not yet validated.
+     - `test_win32_ctypes_prototype_declarations`: `AssertionError: assert 2147483650 == 18446744071562067970` because `HKEY_LOCAL_MACHINE` was not pointer-sized/sign-extended and prototypes lacked explicit `argtypes`/`restype`.
+2. **Implementation:**
+   - Sign-extended `HKEY_LOCAL_MACHINE` to 64-bit unsigned `0xFFFFFFFF80000002` on 64-bit Python.
+   - Added Win32 ctypes structure definitions: `GENERIC_MAPPING`, `PRIVILEGE_SET`, `ACL_SIZE_INFORMATION`, `ACE_HEADER`, `ACCESS_ALLOWED_ACE`.
+   - Implemented `configure_win32_prototypes` configuring explicit pointer-sized `argtypes` and `restype` across all Win32 API calls on `kernel32` and `advapi32`.
+   - Implemented `parse_sddl` helper converting approved SDDL into owner SID, protection flag, and discrete ACE structures.
+   - Enhanced `WindowsRegistryBackend`:
+     - Configures Win32 prototypes.
+     - Extracts owner SID from `GetSecurityDescriptorOwner` and validates equality with `BUILTIN\Administrators` (`S-1-5-32-544`) for task-created keys.
+     - Enumerates DACL ACEs via `GetSecurityDescriptorDacl`, `GetAclInformation`, and `GetAce`. Validates exactly 3 ACEs, `ACCESS_ALLOWED_ACE_TYPE`, zero flags (`AceFlags == 0`, rejecting inherited or callback ACEs), distinct trustees, and exact rights matching `(SY: KEY_ALL_ACCESS, BA: KEY_ALL_ACCESS, BU: KEY_READ)`.
+     - Maps desired access masks with `advapi32.MapGenericMask` before `AccessCheck` calls.
+     - Preserves fail-closed semantics and resource cleanup (`LocalFree`, `RegCloseKey`, `CloseHandle`) on all error paths.
+   - Enhanced `SyntheticRegistryBackend`:
+     - Enforces owner SID validation and exact DACL/ACE structure matching the approved task-key SDDL for task-created keys.
+     - Leaves shared root `HKLM\SOFTWARE` under effective-rights checks only with no owner allowlist or task-key SDDL.
+     - Added `test_windows_registry_backend_null_pointers_and_cleanup_on_error` using synthetic Win32 API boundaries to verify null pointer rejection and proper resource cleanup without host registry calls.
+3. **GREEN Cycle:**
+   - Executed: `cd backend && .venv\Scripts\python.exe -m pytest -q tests/test_admin_bootstrap.py`
+   - Observed GREEN: `42 passed in 1.51s`.
+   - Executed: `cd backend && .venv\Scripts\python.exe -m pytest -q`
+   - Observed GREEN: `132 passed, 2 skipped, 1 warning in 5.96s`.
+
+### 15.2 Verification Commands and Exact Results
+
+1. **Command 1: Focused Bootstrap Unit Tests**
+   - **Command:** `cd backend && .venv\Scripts\python.exe -m pytest -q tests/test_admin_bootstrap.py`
+   - **Result:** `42 passed in 1.51s`
+   - **Exit code:** `0`
+
+2. **Command 2: Full Backend Test Suite**
+   - **Command:** `cd backend && .venv\Scripts\python.exe -m pytest -q`
+   - **Result:** `132 passed, 2 skipped, 1 warning in 5.96s`
+   - **Exit code:** `0`
+   - *(Note: `test_postgresql.py` skipped because `TEST_DATABASE_URL` is not set; warnings are standard Starlette TestClient deprecation).*
+
+3. **Command 3: Ruff Linter Check**
+   - **Command:** `cd backend && .venv\Scripts\ruff.exe check . ../dev`
+   - **Result:** `All checks passed!`
+   - **Exit code:** `0`
+
+4. **Command 4: Ruff Formatting Check**
+   - **Command:** `cd backend && .venv\Scripts\ruff.exe format --check app/config.py app/auth/bootstrap_admins.py app/auth/models.py tests/test_admin_bootstrap.py`
+   - **Result:** `4 files already formatted`
+   - **Exit code:** `0`
+
+5. **Command 5: Alembic Offline Upgrade SQL Check**
+   - **Command:** `cd backend && .venv\Scripts\python.exe -m alembic upgrade head --sql`
+   - **Result:** Valid SQL generated for all migrations through `0006_bootstrap_trust_boundary`.
+   - **Exit code:** `0`
+
+6. **Command 6: Git Diff Whitespace and Conflict Check**
+   - **Command:** `git diff --check` (from repository root)
+   - **Result:** Clean (no whitespace errors or conflict markers).
+   - **Exit code:** `0`
+
+### 15.3 Authoritative Boundaries and Limitations
+- **Synthetic Test Seam Only:** All tests use `SyntheticRegistryBackend` simulating 64-bit Windows Registry APIs or mock API boundaries for Win32 calls.
+- **Host Guarantees NOT_VERIFIED:** No actual host Registry keys, Windows ACLs, OS elevation, or live runtime permission checks were executed or modified on this machine. Real host trust-store, two-account, and live runtime guarantees remain `NOT_VERIFIED`.

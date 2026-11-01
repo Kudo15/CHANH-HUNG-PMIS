@@ -9,7 +9,15 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth.models import User
-from app.auth.policy import ProjectScopeResolver
+from app.auth.policy import (
+    Action,
+    DefaultProjectScopeResolver,
+    Principal,
+    ProjectScopeResolver,
+    ResourceContext,
+    _is_role_permitted,
+    authorize,
+)
 from app.projects.models import AuditEvent, Project, ProjectMember, Task, utc_now
 from app.projects.schemas import (
     AuditEventListResponse,
@@ -132,6 +140,12 @@ class DatabaseProjectScopeResolver(ProjectScopeResolver):
         task = self.db.query(Task).filter_by(id=task_id, assignee_id=user_id).first()
         return task is not None
 
+    def get_user_project_role(self, user_id: str, project_id: str) -> str | None:
+        member = (
+            self.db.query(ProjectMember).filter_by(user_id=user_id, project_id=project_id).first()
+        )
+        return member.role if member else None
+
 
 def get_user_project_role(db: DBSession, user_id: str, project_id: str) -> str | None:
     member = db.query(ProjectMember).filter_by(user_id=user_id, project_id=project_id).first()
@@ -207,6 +221,7 @@ def archive_project(
     actor_id: str,
     project_id: str,
     correlation_id: str,
+    actor_roles: list[str] | None = None,
 ) -> Project:
     project = db.query(Project).filter_by(id=project_id).first()
     if not project:
@@ -217,6 +232,27 @@ def archive_project(
         raise HTTPException(status_code=404, detail="Project not found")
     if caller_role != ProjectRole.PROJECT_MANAGER.value:
         raise HTTPException(status_code=403, detail="Only Project Manager can archive a project")
+
+    if actor_roles is not None:
+        user = db.query(User).filter_by(id=actor_id).first()
+        principal = Principal(
+            id=actor_id,
+            sub=user.sub if user else "",
+            email=user.email if user else "",
+            name=user.name if user else "",
+            roles=actor_roles,
+            is_active=user.is_active if user else True,
+        )
+        resolver = DatabaseProjectScopeResolver(db)
+        if not authorize(
+            principal,
+            Action.PROJECT_ARCHIVE,
+            ResourceContext(project_id=project_id, project_role=caller_role),
+            resolver,
+        ):
+            raise HTTPException(
+                status_code=403, detail="Only Project Manager can archive a project"
+            )
 
     if project.lifecycle == "archived":
         return project
@@ -254,6 +290,7 @@ def assign_project_member(
     project_id: str,
     payload: ProjectMemberAssign,
     correlation_id: str,
+    actor_roles: list[str] | None = None,
 ) -> tuple[ProjectMember, bool]:
     project = db.query(Project).filter_by(id=project_id).first()
     if not project:
@@ -264,6 +301,25 @@ def assign_project_member(
         raise HTTPException(status_code=404, detail="Project not found")
     if caller_role != ProjectRole.PROJECT_MANAGER.value:
         raise HTTPException(status_code=403, detail="Only Project Manager can assign members")
+
+    if actor_roles is not None:
+        user = db.query(User).filter_by(id=actor_id).first()
+        principal = Principal(
+            id=actor_id,
+            sub=user.sub if user else "",
+            email=user.email if user else "",
+            name=user.name if user else "",
+            roles=actor_roles,
+            is_active=user.is_active if user else True,
+        )
+        resolver = DatabaseProjectScopeResolver(db)
+        if not authorize(
+            principal,
+            Action.PROJECT_ASSIGN,
+            ResourceContext(project_id=project_id, project_role=caller_role),
+            resolver,
+        ):
+            raise HTTPException(status_code=403, detail="Only Project Manager can assign members")
 
     if project.lifecycle == "archived":
         raise HTTPException(status_code=400, detail="Cannot modify members of an archived project")
@@ -365,6 +421,7 @@ def create_task(
     project_id: str,
     payload: TaskCreate,
     correlation_id: str,
+    actor_roles: list[str] | None = None,
 ) -> Task:
     project = db.query(Project).filter_by(id=project_id).first()
     if not project:
@@ -375,6 +432,25 @@ def create_task(
         raise HTTPException(status_code=404, detail="Project not found")
     if caller_role != ProjectRole.PROJECT_MANAGER.value:
         raise HTTPException(status_code=403, detail="Only Project Manager can create tasks")
+
+    if actor_roles is not None:
+        user = db.query(User).filter_by(id=actor_id).first()
+        principal = Principal(
+            id=actor_id,
+            sub=user.sub if user else "",
+            email=user.email if user else "",
+            name=user.name if user else "",
+            roles=actor_roles,
+            is_active=user.is_active if user else True,
+        )
+        resolver = DatabaseProjectScopeResolver(db)
+        if not authorize(
+            principal,
+            Action.TASK_CREATE,
+            ResourceContext(project_id=project_id, project_role=caller_role),
+            resolver,
+        ):
+            raise HTTPException(status_code=403, detail="Only Project Manager can create tasks")
 
     if project.lifecycle == "archived":
         raise HTTPException(status_code=400, detail="Cannot create tasks in an archived project")
@@ -446,6 +522,7 @@ def transition_task_status(
     task_id: str,
     target_status: TaskStatus,
     correlation_id: str,
+    actor_roles: list[str] | None = None,
 ) -> Task:
     task = db.query(Task).filter_by(id=task_id).first()
     if not task:
@@ -472,6 +549,30 @@ def transition_task_status(
 
     if caller_role == ProjectRole.AUDITOR.value:
         raise HTTPException(status_code=403, detail="Auditor cannot modify task status")
+
+    if actor_roles is not None:
+        user = db.query(User).filter_by(id=actor_id).first()
+        principal = Principal(
+            id=actor_id,
+            sub=user.sub if user else "",
+            email=user.email if user else "",
+            name=user.name if user else "",
+            roles=actor_roles,
+            is_active=user.is_active if user else True,
+        )
+        resolver = DatabaseProjectScopeResolver(db)
+        required_act = (
+            Action.TASK_UPDATE
+            if caller_role == ProjectRole.MEMBER.value
+            else Action.TASK_TRANSITION
+        )
+        if not authorize(
+            principal,
+            required_act,
+            ResourceContext(project_id=task.project_id, task_id=task_id, project_role=caller_role),
+            resolver,
+        ):
+            raise HTTPException(status_code=403, detail="Unauthorized to transition task")
 
     if caller_role == ProjectRole.MEMBER.value:
         # Member can only transition own assigned task
@@ -604,19 +705,53 @@ def get_dashboard_summary(
     db: DBSession,
     user_id: str,
     as_of: datetime | None = None,
+    actor_roles: list[str] | None = None,
 ) -> DashboardSummaryResponse:
+    empty_resp = DashboardSummaryResponse(
+        projects=[],
+        total_projects=0,
+        total_tasks=0,
+        total_overdue_tasks=0,
+        total_task_status_counts=TaskStatusCounts(),
+    )
+
+    # Global role intersection: if any role denies business read, return empty summary
+    if actor_roles is not None:
+        user = db.query(User).filter_by(id=user_id).first()
+        principal = Principal(
+            id=user_id,
+            sub=user.sub if user else "",
+            email=user.email if user else "",
+            name=user.name if user else "",
+            roles=actor_roles,
+            is_active=user.is_active if user else True,
+        )
+        for r in actor_roles:
+            if not _is_role_permitted(
+                r,
+                Action.PROJECT_READ.value,
+                principal,
+                "dummy",
+                None,
+                True,
+                DefaultProjectScopeResolver(),
+            ):
+                return empty_resp
+
     # Deny-by-default: resolve explicit project memberships for caller
-    assigned_memberships = db.query(ProjectMember.project_id).filter_by(user_id=user_id).all()
+    # Only include projects where user has read-permitted role (PM or Member, not Auditor)
+    assigned_memberships = (
+        db.query(ProjectMember.project_id)
+        .filter(
+            ProjectMember.user_id == user_id,
+            ProjectMember.role.in_([ProjectRole.PROJECT_MANAGER.value, ProjectRole.MEMBER.value]),
+        )
+        .all()
+    )
     assigned_project_ids = [m[0] for m in assigned_memberships]
 
     if not assigned_project_ids:
-        return DashboardSummaryResponse(
-            projects=[],
-            total_projects=0,
-            total_tasks=0,
-            total_overdue_tasks=0,
-            total_task_status_counts=TaskStatusCounts(),
-        )
+        return empty_resp
 
     projects = db.query(Project).filter(Project.id.in_(assigned_project_ids)).all()
 
@@ -689,6 +824,7 @@ def list_project_audit_events(
     project_id: str,
     limit: int = 50,
     cursor: str | None = None,
+    actor_roles: list[str] | None = None,
 ) -> AuditEventListResponse:
     # Cap limit to maximum 100
     if limit > 100:
@@ -705,6 +841,26 @@ def list_project_audit_events(
     project = db.query(Project).filter_by(id=project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    # Global roles intersection check for Action.AUDIT_READ:
+    if actor_roles is not None:
+        user = db.query(User).filter_by(id=actor_id).first()
+        principal = Principal(
+            id=actor_id,
+            sub=user.sub if user else "",
+            email=user.email if user else "",
+            name=user.name if user else "",
+            roles=actor_roles,
+            is_active=user.is_active if user else True,
+        )
+        resolver = DatabaseProjectScopeResolver(db)
+        if not authorize(
+            principal,
+            Action.AUDIT_READ,
+            ResourceContext(project_id=project_id, project_role=caller_role),
+            resolver,
+        ):
+            raise HTTPException(status_code=404, detail="Project not found")
 
     query = db.query(AuditEvent).filter(AuditEvent.project_id == project_id)
 

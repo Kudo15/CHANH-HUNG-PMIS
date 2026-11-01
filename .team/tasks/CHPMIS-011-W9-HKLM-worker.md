@@ -2,8 +2,8 @@
 
 - **Task ID:** CHPMIS-011-W9-HKLM
 - **Role:** Hermes Worker (sole product-code writer)
-- **Status:** READY FOR OWNER AUTHORIZATION — design approved; code dispatch and actual host provisioning/runtime remain gated.
-- **Authority:** Owner approved the local synthetic CHPMIS-011 hardening and, on 2026-10-31, approved Candidate C HKLM trust-source design only. Do not mutate host state.
+- **Status:** CODE IMPLEMENTATION AUTHORIZED — user directed execution of the next big roadmap task (CHPMIS-016) on 2026-10-31. Host provisioning/runtime remain gated.
+- **Authority:** Owner approved Candidate C HKLM trust-source design only; user's 2026-10-31 instruction authorizes the bounded code-only implementation in this pack. Do not mutate host state, Registry, accounts, or ACLs.
 - **Trace:** CHPMIS-011 AC-05; `.team/tasks/CHPMIS-011-local-oidc-bootstrap.md`; `.team/tasks/CHPMIS-011-W2-credential-safety-correction.md`; `docs/superpowers/plans/2026-10-31-chpmis-011-local-oidc-bootstrap.md` Candidate C.
 - **Prompt template:** Reuse the retrieved Feature coding template by Onyekachi Ibekwe, prompts.chat ID `cmp1fv5ac0001js04jbj3pxoa` (cited in the main task pack). Modernize as a Python/FastAPI Worker: inspect existing implementation, preserve scope, use observed RED→GREEN, handle errors safely, run only listed checks and report exact results. Do not add Hermes skill metadata for Codex skills.
 

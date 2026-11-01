@@ -4,7 +4,14 @@ from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Re
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth.models import User
-from app.auth.policy import Role
+from app.auth.policy import (
+    Action,
+    DefaultProjectScopeResolver,
+    Principal,
+    ResourceContext,
+    _is_role_permitted,
+    authorize,
+)
 from app.auth.session import validate_session
 from app.config import Settings
 from app.database import get_db
@@ -16,17 +23,18 @@ from app.projects.schemas import (
     ProjectMemberAssign,
     ProjectMemberRead,
     ProjectRead,
+    ProjectRole,
     TaskCreate,
     TaskRead,
     TaskStatusUpdate,
 )
 from app.projects.service import (
+    DatabaseProjectScopeResolver,
     archive_project,
     assign_project_member,
     create_project,
     create_task,
     get_dashboard_summary,
-    get_user_project_role,
     list_project_audit_events,
     transition_task_status,
 )
@@ -65,10 +73,38 @@ def list_projects(
     auth_data: tuple[User, list[str], str] = Depends(get_current_user_and_roles),
     db: DBSession = Depends(get_db),
 ) -> list[Project]:
-    user, _, _ = auth_data
-    # Deny by default: return only projects where the caller is explicitly an assigned member
-    assigned_project_ids = db.query(ProjectMember.project_id).filter_by(user_id=user.id).all()
-    p_ids = [p[0] for p in assigned_project_ids]
+    user, roles, _ = auth_data
+    principal = Principal(
+        id=user.id,
+        sub=user.sub,
+        email=user.email,
+        name=user.name,
+        roles=roles,
+        department=user.department,
+        is_active=user.is_active,
+    )
+    for r in roles:
+        if not _is_role_permitted(
+            r,
+            Action.PROJECT_READ.value,
+            principal,
+            "dummy",
+            None,
+            True,
+            DefaultProjectScopeResolver(),
+        ):
+            return []
+
+    # Deny by default: return only projects where caller is assigned with read access (PM or Member)
+    assigned_memberships = (
+        db.query(ProjectMember.project_id)
+        .filter(
+            ProjectMember.user_id == user.id,
+            ProjectMember.role.in_([ProjectRole.PROJECT_MANAGER.value, ProjectRole.MEMBER.value]),
+        )
+        .all()
+    )
+    p_ids = [p[0] for p in assigned_memberships]
     if not p_ids:
         return []
     return db.query(Project).filter(Project.id.in_(p_ids)).all()
@@ -86,8 +122,16 @@ def create_new_project(
     if not x_csrf_token or x_csrf_token != csrf_token:
         raise HTTPException(status_code=403, detail="Invalid or missing CSRF token")
 
-    # Project creation is initiated by an authenticated Project Manager
-    if Role.PROJECT_MANAGER.value not in roles:
+    principal = Principal(
+        id=user.id,
+        sub=user.sub,
+        email=user.email,
+        name=user.name,
+        roles=roles,
+        department=user.department,
+        is_active=user.is_active,
+    )
+    if not authorize(principal, Action.PROJECT_CREATE):
         raise HTTPException(status_code=403, detail="Only Project Managers can create projects")
 
     return create_project(
@@ -104,10 +148,20 @@ def get_project_details(
     auth_data: tuple[User, list[str], str] = Depends(get_current_user_and_roles),
     db: DBSession = Depends(get_db),
 ) -> Project:
-    user, _, _ = auth_data
-    # Inaccessible records must not disclose existence
-    role = get_user_project_role(db, user.id, project_id)
-    if not role:
+    user, roles, _ = auth_data
+    principal = Principal(
+        id=user.id,
+        sub=user.sub,
+        email=user.email,
+        name=user.name,
+        roles=roles,
+        department=user.department,
+        is_active=user.is_active,
+    )
+    resolver = DatabaseProjectScopeResolver(db)
+    if not authorize(
+        principal, Action.PROJECT_READ, ResourceContext(project_id=project_id), resolver
+    ):
         raise HTTPException(status_code=404, detail="Project not found")
 
     project = db.query(Project).filter_by(id=project_id).first()
@@ -124,7 +178,7 @@ def archive_existing_project(
     correlation_id: str = Depends(get_correlation_id),
     db: DBSession = Depends(get_db),
 ) -> Project:
-    user, _, csrf_token = auth_data
+    user, roles, csrf_token = auth_data
     if not x_csrf_token or x_csrf_token != csrf_token:
         raise HTTPException(status_code=403, detail="Invalid or missing CSRF token")
 
@@ -133,6 +187,7 @@ def archive_existing_project(
         actor_id=user.id,
         project_id=project_id,
         correlation_id=correlation_id,
+        actor_roles=roles,
     )
 
 
@@ -154,7 +209,7 @@ def assign_member(
     from fastapi.encoders import jsonable_encoder
     from fastapi.responses import JSONResponse
 
-    user, _, csrf_token = auth_data
+    user, roles, csrf_token = auth_data
     if not x_csrf_token or x_csrf_token != csrf_token:
         raise HTTPException(status_code=403, detail="Invalid or missing CSRF token")
 
@@ -164,6 +219,7 @@ def assign_member(
         project_id=project_id,
         payload=payload,
         correlation_id=correlation_id,
+        actor_roles=roles,
     )
     status_code = 201 if created else 200
     content = jsonable_encoder(ProjectMemberRead.model_validate(member))
@@ -176,9 +232,24 @@ def list_project_members(
     auth_data: tuple[User, list[str], str] = Depends(get_current_user_and_roles),
     db: DBSession = Depends(get_db),
 ) -> list[ProjectMember]:
-    user, _, _ = auth_data
-    role = get_user_project_role(db, user.id, project_id)
-    if not role:
+    user, roles, _ = auth_data
+    principal = Principal(
+        id=user.id,
+        sub=user.sub,
+        email=user.email,
+        name=user.name,
+        roles=roles,
+        department=user.department,
+        is_active=user.is_active,
+    )
+    resolver = DatabaseProjectScopeResolver(db)
+    if not authorize(
+        principal, Action.PROJECT_READ, ResourceContext(project_id=project_id), resolver
+    ):
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
     return db.query(ProjectMember).filter_by(project_id=project_id).all()
@@ -198,7 +269,7 @@ def create_project_task(
     correlation_id: str = Depends(get_correlation_id),
     db: DBSession = Depends(get_db),
 ) -> Task:
-    user, _, csrf_token = auth_data
+    user, roles, csrf_token = auth_data
     if not x_csrf_token or x_csrf_token != csrf_token:
         raise HTTPException(status_code=403, detail="Invalid or missing CSRF token")
 
@@ -208,6 +279,7 @@ def create_project_task(
         project_id=project_id,
         payload=payload,
         correlation_id=correlation_id,
+        actor_roles=roles,
     )
 
 
@@ -217,9 +289,22 @@ def list_project_tasks(
     auth_data: tuple[User, list[str], str] = Depends(get_current_user_and_roles),
     db: DBSession = Depends(get_db),
 ) -> list[Task]:
-    user, _, _ = auth_data
-    role = get_user_project_role(db, user.id, project_id)
-    if not role:
+    user, roles, _ = auth_data
+    principal = Principal(
+        id=user.id,
+        sub=user.sub,
+        email=user.email,
+        name=user.name,
+        roles=roles,
+        department=user.department,
+        is_active=user.is_active,
+    )
+    resolver = DatabaseProjectScopeResolver(db)
+    if not authorize(principal, Action.TASK_READ, ResourceContext(project_id=project_id), resolver):
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
     return db.query(Task).filter_by(project_id=project_id).all()
@@ -231,13 +316,27 @@ def get_task_details(
     auth_data: tuple[User, list[str], str] = Depends(get_current_user_and_roles),
     db: DBSession = Depends(get_db),
 ) -> Task:
-    user, _, _ = auth_data
+    user, roles, _ = auth_data
     task = db.query(Task).filter_by(id=task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    role = get_user_project_role(db, user.id, task.project_id)
-    if not role:
+    principal = Principal(
+        id=user.id,
+        sub=user.sub,
+        email=user.email,
+        name=user.name,
+        roles=roles,
+        department=user.department,
+        is_active=user.is_active,
+    )
+    resolver = DatabaseProjectScopeResolver(db)
+    if not authorize(
+        principal,
+        Action.TASK_READ,
+        ResourceContext(project_id=task.project_id, task_id=task_id),
+        resolver,
+    ):
         raise HTTPException(status_code=404, detail="Task not found")
 
     return task
@@ -252,7 +351,7 @@ def update_task_status(
     correlation_id: str = Depends(get_correlation_id),
     db: DBSession = Depends(get_db),
 ) -> Task:
-    user, _, csrf_token = auth_data
+    user, roles, csrf_token = auth_data
     if not x_csrf_token or x_csrf_token != csrf_token:
         raise HTTPException(status_code=403, detail="Invalid or missing CSRF token")
 
@@ -262,6 +361,7 @@ def update_task_status(
         task_id=task_id,
         target_status=payload.status,
         correlation_id=correlation_id,
+        actor_roles=roles,
     )
 
 
@@ -275,8 +375,8 @@ def get_scoped_dashboard_summary(
     auth_data: tuple[User, list[str], str] = Depends(get_current_user_and_roles),
     db: DBSession = Depends(get_db),
 ) -> DashboardSummaryResponse:
-    user, _, _ = auth_data
-    return get_dashboard_summary(db=db, user_id=user.id)
+    user, roles, _ = auth_data
+    return get_dashboard_summary(db=db, user_id=user.id, actor_roles=roles)
 
 
 # ============================================================================
@@ -292,11 +392,12 @@ def get_project_audit_events(
     auth_data: tuple[User, list[str], str] = Depends(get_current_user_and_roles),
     db: DBSession = Depends(get_db),
 ) -> AuditEventListResponse:
-    user, _, _ = auth_data
+    user, roles, _ = auth_data
     return list_project_audit_events(
         db=db,
         actor_id=user.id,
         project_id=project_id,
         limit=limit,
         cursor=cursor,
+        actor_roles=roles,
     )

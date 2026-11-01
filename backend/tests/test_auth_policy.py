@@ -1,5 +1,4 @@
 import pytest
-
 from app.auth.policy import (
     Action,
     AuthorizationError,
@@ -19,6 +18,8 @@ class MockProjectScopeResolver(ProjectScopeResolver):
         self.task_projects: dict[str, str] = {}
         # (user_id, project_id) -> bool
         self.project_assignments: set[tuple[str, str]] = set()
+        # (user_id, project_id) -> str
+        self.project_roles: dict[tuple[str, str], str] = {}
         # (user_id, task_id) -> bool
         self.task_assignments: set[tuple[str, str]] = set()
 
@@ -28,10 +29,17 @@ class MockProjectScopeResolver(ProjectScopeResolver):
     def is_user_assigned_to_project(
         self, user_id: str, project_id: str, required_role: str | None = None
     ) -> bool:
-        return (user_id, project_id) in self.project_assignments
+        if (user_id, project_id) not in self.project_assignments:
+            return False
+        if required_role is not None:
+            return self.project_roles.get((user_id, project_id)) == required_role
+        return True
 
     def is_user_assigned_to_task(self, user_id: str, task_id: str) -> bool:
         return (user_id, task_id) in self.task_assignments
+
+    def get_user_project_role(self, user_id: str, project_id: str) -> str | None:
+        return self.project_roles.get((user_id, project_id))
 
 
 def test_deny_by_default():
@@ -191,6 +199,7 @@ def test_project_manager_scoped_to_assigned_project():
     )
     resolver = MockProjectScopeResolver()
     resolver.project_assignments.add(("pm1", "proj_assigned"))
+    resolver.project_roles[("pm1", "proj_assigned")] = Role.PROJECT_MANAGER.value
 
     # PM can create projects (subject to system rules)
     assert authorize(pm, Action.PROJECT_CREATE, None, resolver) is True
@@ -217,6 +226,7 @@ def test_member_permissions_and_own_task_update():
     )
     resolver = MockProjectScopeResolver()
     resolver.project_assignments.add(("m1", "proj_1"))
+    resolver.project_roles[("m1", "proj_1")] = Role.MEMBER.value
     resolver.task_projects["task_own"] = "proj_1"
     resolver.task_projects["task_other_member"] = "proj_1"
     resolver.task_projects["task_other_proj"] = "proj_2"
@@ -284,6 +294,7 @@ def test_auditor_permissions():
     )
     resolver = MockProjectScopeResolver()
     resolver.project_assignments.add(("aud1", "proj_1"))
+    resolver.project_roles[("aud1", "proj_1")] = Role.AUDITOR.value
 
     # Can read audit in assigned project
     assert (
@@ -308,16 +319,15 @@ def test_auditor_permissions():
 
 
 def test_system_admin_api_endpoints():
-    from fastapi.testclient import TestClient
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    from sqlalchemy.pool import StaticPool
-
     from app.auth.models import Session, User, UserRole
     from app.auth.session import create_session
     from app.config import Settings
     from app.database import Base
     from app.main import create_app
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
 
     engine = create_engine(
         "sqlite://",
@@ -464,3 +474,208 @@ def test_system_admin_api_endpoints():
             assert grant is None
     finally:
         engine.dispose()
+
+
+def test_multi_role_intersection_policy_ac17():
+    resolver = MockProjectScopeResolver()
+    resolver.project_assignments.add(("u_multi", "p1"))
+    resolver.project_roles[("u_multi", "p1")] = Role.PROJECT_MANAGER.value
+    resolver.task_projects["t1"] = "p1"
+    resolver.task_assignments.add(("u_multi", "t1"))
+
+    # 1. System Admin + Project Manager: no business data action allowed
+    sa_pm = Principal(
+        id="u_multi",
+        sub="s_multi",
+        email="multi@test.com",
+        name="Multi",
+        roles=[Role.SYSTEM_ADMIN, Role.PROJECT_MANAGER],
+    )
+    assert authorize(sa_pm, Action.PROJECT_CREATE) is False
+    assert (
+        authorize(sa_pm, Action.PROJECT_READ, ResourceContext(project_id="p1"), resolver) is False
+    )
+    assert (
+        authorize(sa_pm, Action.PROJECT_MANAGE, ResourceContext(project_id="p1"), resolver) is False
+    )
+    assert authorize(sa_pm, Action.TASK_READ, ResourceContext(task_id="t1"), resolver) is False
+    assert authorize(sa_pm, Action.AUDIT_READ, ResourceContext(project_id="p1"), resolver) is False
+    # Also admin actions are denied because PM does not permit them
+    assert authorize(sa_pm, Action.ROLE_GRANT) is False
+
+    # 2. Project Manager + Member: only overlapping read actions allowed
+    pm_mem = Principal(
+        id="u_multi",
+        sub="s_multi",
+        email="multi@test.com",
+        name="Multi",
+        roles=[Role.PROJECT_MANAGER, Role.MEMBER],
+    )
+    # Reads overlap and are permitted in scope
+    assert (
+        authorize(pm_mem, Action.PROJECT_READ, ResourceContext(project_id="p1"), resolver) is True
+    )
+    assert authorize(pm_mem, Action.TASK_READ, ResourceContext(task_id="t1"), resolver) is True
+    # Non-overlapping actions are denied
+    assert authorize(pm_mem, Action.PROJECT_CREATE) is False
+    assert (
+        authorize(pm_mem, Action.PROJECT_MANAGE, ResourceContext(project_id="p1"), resolver)
+        is False
+    )
+    assert (
+        authorize(pm_mem, Action.PROJECT_ASSIGN, ResourceContext(project_id="p1"), resolver)
+        is False
+    )
+    assert (
+        authorize(pm_mem, Action.PROJECT_ARCHIVE, ResourceContext(project_id="p1"), resolver)
+        is False
+    )
+    assert (
+        authorize(pm_mem, Action.TASK_CREATE, ResourceContext(project_id="p1"), resolver) is False
+    )
+    assert authorize(pm_mem, Action.AUDIT_READ, ResourceContext(project_id="p1"), resolver) is False
+
+    # 3. Project Manager + Auditor: audit read allowed in scope, other actions denied
+    pm_aud = Principal(
+        id="u_multi",
+        sub="s_multi",
+        email="multi@test.com",
+        name="Multi",
+        roles=[Role.PROJECT_MANAGER, Role.AUDITOR],
+    )
+    assert authorize(pm_aud, Action.AUDIT_READ, ResourceContext(project_id="p1"), resolver) is True
+    assert authorize(pm_aud, Action.PROJECT_CREATE) is False
+    assert (
+        authorize(pm_aud, Action.PROJECT_READ, ResourceContext(project_id="p1"), resolver) is False
+    )
+    assert (
+        authorize(pm_aud, Action.PROJECT_MANAGE, ResourceContext(project_id="p1"), resolver)
+        is False
+    )
+    assert authorize(pm_aud, Action.TASK_READ, ResourceContext(task_id="t1"), resolver) is False
+
+    # 4. Member + Auditor: intersection is empty -> fails closed
+    mem_aud = Principal(
+        id="u_multi",
+        sub="s_multi",
+        email="multi@test.com",
+        name="Multi",
+        roles=[Role.MEMBER, Role.AUDITOR],
+    )
+    assert (
+        authorize(mem_aud, Action.PROJECT_READ, ResourceContext(project_id="p1"), resolver) is False
+    )
+    assert authorize(mem_aud, Action.TASK_READ, ResourceContext(task_id="t1"), resolver) is False
+    assert (
+        authorize(mem_aud, Action.AUDIT_READ, ResourceContext(project_id="p1"), resolver) is False
+    )
+    assert authorize(mem_aud, Action.PROJECT_CREATE) is False
+
+
+def test_missing_project_role_fail_closed():
+    pm = Principal(
+        id="pm1", sub="spm", email="pm@test.com", name="PM 1", roles=[Role.PROJECT_MANAGER]
+    )
+    member = Principal(
+        id="m1", sub="sm1", email="m1@test.com", name="Member 1", roles=[Role.MEMBER]
+    )
+    resolver = MockProjectScopeResolver()
+    resolver.project_assignments.add(("pm1", "p1"))
+    resolver.project_assignments.add(("m1", "p1"))
+
+    # 1. Assignment true with missing project role: fails closed
+    assert authorize(pm, Action.PROJECT_READ, ResourceContext(project_id="p1"), resolver) is False
+    assert authorize(pm, Action.PROJECT_MANAGE, ResourceContext(project_id="p1"), resolver) is False
+    assert (
+        authorize(member, Action.PROJECT_READ, ResourceContext(project_id="p1"), resolver) is False
+    )
+
+    # 2. Assignment true with invalid project role: fails closed
+    ctx_invalid = ResourceContext(project_id="p1", project_role="non_existent_role")
+    assert authorize(pm, Action.PROJECT_READ, ctx_invalid, resolver) is False
+    assert authorize(member, Action.PROJECT_READ, ctx_invalid, resolver) is False
+
+    # 3. Valid roles with positive and negative intersections
+    # Positive: global PM + project PM
+    resolver.project_roles[("pm1", "p1")] = Role.PROJECT_MANAGER.value
+    assert authorize(pm, Action.PROJECT_READ, ResourceContext(project_id="p1"), resolver) is True
+    assert authorize(pm, Action.PROJECT_MANAGE, ResourceContext(project_id="p1"), resolver) is True
+
+    # Positive: global Member + project Member
+    resolver.project_roles[("m1", "p1")] = Role.MEMBER.value
+    assert (
+        authorize(member, Action.PROJECT_READ, ResourceContext(project_id="p1"), resolver) is True
+    )
+
+    # Negative intersection: global PM + project Member (Member role denies project:manage)
+    ctx_pm_as_member = ResourceContext(project_id="p1", project_role=Role.MEMBER.value)
+    assert authorize(pm, Action.PROJECT_MANAGE, ctx_pm_as_member, resolver) is False
+
+    # Negative intersection: global Member + project PM (Member global role denies project:manage)
+    ctx_member_as_pm = ResourceContext(project_id="p1", project_role=Role.PROJECT_MANAGER.value)
+    assert authorize(member, Action.PROJECT_MANAGE, ctx_member_as_pm, resolver) is False
+
+    # 4. Ensure unresolved task parent cannot grant task access
+    assert (
+        authorize(pm, Action.TASK_READ, ResourceContext(task_id="unresolved_task"), resolver)
+        is False
+    )
+    assert (
+        authorize(member, Action.TASK_READ, ResourceContext(task_id="unresolved_task"), resolver)
+        is False
+    )
+    assert (
+        authorize(member, Action.TASK_UPDATE, ResourceContext(task_id="unresolved_task"), resolver)
+        is False
+    )
+
+    # 5. Global project creation semantics preserved
+    assert authorize(pm, Action.PROJECT_CREATE, None, resolver) is True
+    assert authorize(member, Action.PROJECT_CREATE, None, resolver) is False
+
+
+def test_task_project_mismatch_fail_closed():
+    pm = Principal(
+        id="pm1", sub="spm", email="pm@test.com", name="PM 1", roles=[Role.PROJECT_MANAGER]
+    )
+    member = Principal(
+        id="m1", sub="sm1", email="m1@test.com", name="Member 1", roles=[Role.MEMBER]
+    )
+    resolver = MockProjectScopeResolver()
+    resolver.project_assignments.add(("pm1", "proj_a"))
+    resolver.project_roles[("pm1", "proj_a")] = Role.PROJECT_MANAGER.value
+    resolver.project_assignments.add(("m1", "proj_a"))
+    resolver.project_roles[("m1", "proj_a")] = Role.MEMBER.value
+
+    # proj_a has task_a; proj_b has task_b
+    resolver.task_projects["task_a"] = "proj_a"
+    resolver.task_projects["task_b"] = "proj_b"
+    resolver.task_assignments.add(("m1", "task_a"))
+
+    # 1. Mismatch between supplied project_id and task's actual parent project: fails closed
+    # Caller supplies proj_a (where pm1 has access) but task_b (which belongs to proj_b)
+    ctx_mismatch_pm = ResourceContext(project_id="proj_a", task_id="task_b")
+    assert authorize(pm, Action.TASK_READ, ctx_mismatch_pm, resolver) is False
+
+    ctx_mismatch_member = ResourceContext(project_id="proj_a", task_id="task_b")
+    assert authorize(member, Action.TASK_READ, ctx_mismatch_member, resolver) is False
+    assert authorize(member, Action.TASK_UPDATE, ctx_mismatch_member, resolver) is False
+
+    # 2. Supplied task cannot be resolved: fails closed even if project_id is supplied
+    ctx_unresolvable = ResourceContext(project_id="proj_a", task_id="unresolvable_task")
+    assert authorize(pm, Action.TASK_READ, ctx_unresolvable, resolver) is False
+    assert authorize(member, Action.TASK_READ, ctx_unresolvable, resolver) is False
+
+    # 3. Valid matching supplied project_id and task_id: allowed when policy permits
+    ctx_match_pm = ResourceContext(project_id="proj_a", task_id="task_a")
+    assert authorize(pm, Action.TASK_READ, ctx_match_pm, resolver) is True
+
+    ctx_match_member = ResourceContext(project_id="proj_a", task_id="task_a")
+    assert authorize(member, Action.TASK_READ, ctx_match_member, resolver) is True
+    assert authorize(member, Action.TASK_UPDATE, ctx_match_member, resolver) is True
+
+    # 4. Task-only resolution preserved
+    assert authorize(pm, Action.TASK_READ, ResourceContext(task_id="task_a"), resolver) is True
+    assert authorize(pm, Action.TASK_READ, ResourceContext(task_id="task_b"), resolver) is False
+    assert authorize(member, Action.TASK_READ, ResourceContext(task_id="task_a"), resolver) is True
+    assert authorize(member, Action.TASK_READ, ResourceContext(task_id="task_b"), resolver) is False

@@ -76,3 +76,21 @@ Approval is required before changing authorization semantics, freshness window o
 - The owner's approval above covers the local synthetic policy objectives. The implementation follow-up W9 is **BLOCKED** before product edits: the prescribed fixed trust store's effective Windows ACL and every ancestor's replacement/reparse boundary have not been demonstrated safely under the current unprivileged/no-host-change constraints. Prototype `t_0ae2472c` used Windows APIs on in-memory descriptors, but Coordinator observed token-dependent results and no real two-account or ancestor-race proof. Do not treat an in-memory example as proof of the real host boundary.
 - Next technical work: produce and independently review a handle-based, race-resistant trust-source design and a concrete local provisioning/integration procedure. Any proposal to create or modify real local accounts, ACLs or protected files must identify the exact changes and request separately appropriate authorization before applying them. No private key or real user identity is to be posted in Git/chat. Until the security and runtime gates are satisfied, the W8 runbook remains **DO NOT EXECUTE**, and AC-05 live evidence remains NOT_VERIFIED.
 - W10 test-only correction is independently tested/reviewed: an injected failure after receipt flush rolls back on the SQLite in-memory test path. OpenCode's full backend suite passed 98 with 1 skipped. This does not prove PostgreSQL behavior or close W9. The OpenCode scoped Git status denial remains unresolved.
+
+### CHPMIS-016 owner policy question — shared HKLM root SID — RESOLVED 2026-11-01
+
+- Owner decision: check effective rights only at `HKLM\\SOFTWARE`; keys created by CHPMIS must be owned by `BUILTIN\\Administrators` (`S-1-5-32-544`).
+- F2 must not enforce an owner allowlist or the task-key SDDL on the shared root. This resolves application policy only; current Windows host Registry state was not inspected and no Registry call was executed.
+
+### CHPMIS-017 multi-role authorization combination — RESOLVED 2026-11-01
+
+- Owner selected permission intersection across all applicable roles: an action is allowed only if every role permits it. Project-scoped actions additionally require explicit project assignment and permission from the `ProjectMember.role`; task-specific scope and transition constraints still apply.
+- System Admin + any business role therefore has no business-data access. No union or role-precedence shortcut is allowed.
+- This decision resolves the local application policy for CHPMIS-017 only; it is not legal approval or production authorization.
+
+### CHPMIS-017 repository-wide Ruff findings — RESOLVED (2026-11-01)
+
+- The corrected read-only OpenCode verifier ran both pytest suites, Ruff format, and `git diff --check` successfully, but repository-wide Ruff reported 19 import-order (`I001`) errors.
+- Five errors are inside CHPMIS-017's approved test-file allowlist. Fourteen are in other files in the existing dirty workspace, including Alembic revisions and test modules outside CHPMIS-017's allowlist; editing those files would exceed the CHPMIS-017 task pack.
+- Owner selected to keep the CHPMIS-017 allowlist, fix only the five I001 findings in four allowed test files, accept Ruff scoped to the seven CHPMIS-017 files, and track the other 14 findings separately. This revises CHPMIS-017's lint criterion only; the repository-wide lint failure remains recorded, not passed.
+- The 14 findings remain open for separately scoped tasks. No changes outside the CHPMIS-017 allowlist are authorized by this decision.

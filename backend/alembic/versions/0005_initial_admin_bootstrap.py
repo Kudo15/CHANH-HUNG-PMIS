@@ -53,9 +53,7 @@ def upgrade() -> None:
             existing_type=sa.String(length=36),
             nullable=True,
         )
-        batch_op.add_column(
-            sa.Column("bootstrap_receipt_id", sa.String(length=36), nullable=True)
-        )
+        batch_op.add_column(sa.Column("bootstrap_receipt_id", sa.String(length=36), nullable=True))
         batch_op.create_foreign_key(
             "fk_user_roles_bootstrap_receipt_id",
             "admin_bootstrap_receipts",

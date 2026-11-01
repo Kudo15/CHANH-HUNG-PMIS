@@ -83,6 +83,11 @@ class AdminBootstrapReceipt(Base):
     approver2_role: Mapped[str] = mapped_column(String(50), nullable=False)
     approver2_key_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     payload_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    instance_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    operator_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
@@ -93,6 +98,19 @@ class AdminBootstrapReceipt(Base):
 
     target_user1: Mapped["User"] = relationship("User", foreign_keys=[target_user1_id])
     target_user2: Mapped["User"] = relationship("User", foreign_keys=[target_user2_id])
+
+
+class AdminBootstrapInstanceState(Base):
+    __tablename__ = "admin_bootstrap_instance_state"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    instance_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    singleton_lock: Mapped[str] = mapped_column(
+        String(20), unique=True, nullable=False, default="INSTANCE_LOCK"
+    )
 
 
 class Session(Base):

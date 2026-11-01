@@ -40,11 +40,21 @@ HG1–HG5 are approved for the local first slice. CHPMIS-003/F1 and 004–010 co
 OpenCode independent CHPMIS-010-T1 regression predates runtime setup: 62 passed/1 skipped, exit 0. Frontend evidence remains CHPMIS-007: 15 tests, lint/build and one Playwright shell check. These do not prove actual IdP/browser flow. First Hermes runtime Reviewer was blocked/stopped after a safety deviation; clean evidence-only review t_a11e6713/run 32 APPROVED, zero P1/P2/P3. Details and skill/run trace in `.team/tasks/CHPMIS-010-runtime-evidence.md`.
 
 CHPMIS-009 prepared a historical checkpoint, not a stage/commit. Its manifest must not be regenerated to conceal CHPMIS-010 source/docs changes; audit-baseline.mjs checks its original task-specific counts and is not a current acceptance audit. Dirty source still requires a separately authorized verified local checkpoint before worktree isolation. No remote/push/deploy occurred.
+
+CHPMIS-017 is complete for local scope: F1 and F2 received independent review, the final Worker backend suite reported 138 passed and 2 skipped, and scoped Ruff/format on seven files passed. OpenCode process deviations remain recorded; 14 historical out-of-scope Ruff findings are tracked as CHPMIS-017-L1. The next planned item is CHPMIS-012, whose scoped implementation/runtime task pack has not yet been prepared; its authentication and external-provider gates remain applicable.
 ## Next execution order
-CHPMIS-011 is in progress under the owner-approved local synthetic design and its bounded implementation plan. CHPMIS-012 and CHPMIS-013 remain proposals:
-1. CHPMIS-011: W10 rollback fault-injection test is independently tested and reviewed for SQLite; OpenCode full suite 98 passed/1 skipped. The owner approved local synthetic trust/freshness/receipt hardening, but W9 is BLOCKED pending a defensible fixed trust-store boundary and its verification; prior R2 approval does not resolve later findings. Resolve the OpenCode scoped Git status denial and execute isolated Keycloak/PostgreSQL checks only after the task's review and runtime gates are met. Actual organization IdP/identities and production remain gated.
-2. CHPMIS-012: verify API/browser routing and the full authenticated Playwright journey for AC-14.
-3. CHPMIS-013: verify GitHub Actions CI for AC-04 and consolidate acceptance; remote/push requires separate authorization.
-6. After first-slice gates: scope M15 administration, M05 documents and M06 notifications. Provider, document classification/retention and any new permission/workflow decisions require their own approval.
+The 2026-10-31 audit mission adds confirmed defects to the earlier roadmap. Preserve CHPMIS-012 (browser OIDC/authenticated E2E) and CHPMIS-013 (schema/CI) as previously reserved IDs; do not reuse them. Continue sequentially on the audit branch with the bounded task packs and synthetic local evidence:
+1. **CHPMIS-014** — canonical System Admin bootstrap role and protected HTTP regression (`.team/tasks/CHPMIS-014-canonical-bootstrap-role.md`).
+2. **CHPMIS-013** — schema/migration/CI contract, including live PostgreSQL upgrade and downgrade evidence.
+3. **CHPMIS-015** — System Admin approval atomicity, authority revalidation, and PostgreSQL concurrency.
+4. **CHPMIS-016** — approved local synthetic bootstrap trust-source behavior; real registry provisioning, identities and custody stay gated.
+5. **CHPMIS-017** — HTTP authorization matrix across roles, endpoints and scopes.
+6. **CHPMIS-012** — browser OIDC fixes followed by authenticated synthetic Playwright E2E through frontend, backend, PostgreSQL and Keycloak.
+7. **CHPMIS-018** — PostgreSQL task concurrency and project/member consistency.
+8. **CHPMIS-019** — frontend structured errors, stale response/session state and calendar-date correctness.
+
+The audit gate is recomputed on the exact final SHA. The multi-department slice stays blocked until in-scope P1/P2 findings are closed, required PostgreSQL and browser E2E checks pass without skips, remote CI passes that SHA, and independent review is accepted. Preserve existing `chpmis010` resources. No actual organization IdP, production identity, registry/account/ACL mutation, deployment or production use is authorized by this plan.
+
+After first-slice gates: scope M15 administration, M05 documents and M06 notifications. Provider, document classification/retention and any new permission/workflow decisions require their own approval.
 
 No real IdP connection, production retention policy, S3 provider, deployment or official legal/financial rule is approved by this roadmap. See `OPEN_QUESTIONS.md` and `.team/baselines/CHPMIS-009-checkpoint.md`.
