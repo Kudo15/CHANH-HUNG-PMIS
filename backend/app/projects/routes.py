@@ -74,6 +74,8 @@ def list_projects(
     db: DBSession = Depends(get_db),
 ) -> list[Project]:
     user, roles, _ = auth_data
+    if not roles:
+        return []
     principal = Principal(
         id=user.id,
         sub=user.sub,

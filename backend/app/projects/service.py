@@ -717,6 +717,8 @@ def get_dashboard_summary(
 
     # Global role intersection: if any role denies business read, return empty summary
     if actor_roles is not None:
+        if not actor_roles:
+            return empty_resp
         user = db.query(User).filter_by(id=user_id).first()
         principal = Principal(
             id=user_id,

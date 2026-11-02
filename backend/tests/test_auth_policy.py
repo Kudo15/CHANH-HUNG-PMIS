@@ -1,4 +1,5 @@
 import pytest
+
 from app.auth.policy import (
     Action,
     AuthorizationError,
@@ -319,15 +320,16 @@ def test_auditor_permissions():
 
 
 def test_system_admin_api_endpoints():
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
     from app.auth.models import Session, User, UserRole
     from app.auth.session import create_session
     from app.config import Settings
     from app.database import Base
     from app.main import create_app
-    from fastapi.testclient import TestClient
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    from sqlalchemy.pool import StaticPool
 
     engine = create_engine(
         "sqlite://",

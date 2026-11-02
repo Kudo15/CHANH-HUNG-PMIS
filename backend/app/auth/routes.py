@@ -4,7 +4,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth.models import SystemAdminRequest, User, UserRole, utc_now
-from app.auth.oidc import initiate_login, process_callback
+from app.auth.oidc import (
+    OIDC_BINDING_COOKIE_NAME,
+    initiate_login_transaction,
+    process_callback,
+)
 from app.auth.policy import (
     Role,
 )
@@ -38,8 +42,18 @@ def login(
     db: DBSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> RedirectResponse:
-    auth_url = initiate_login(db, settings)
-    return RedirectResponse(url=auth_url, status_code=303)
+    auth_url, binding_cookie = initiate_login_transaction(db, settings)
+    response = RedirectResponse(url=auth_url, status_code=303)
+    response.set_cookie(
+        key=OIDC_BINDING_COOKIE_NAME,
+        value=binding_cookie,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+        max_age=600,
+        path="/",
+    )
+    return response
 
 
 @router.get("/callback")
@@ -52,9 +66,56 @@ def callback(
 ) -> JSONResponse:
     oidc_client = getattr(request.app.state, "oidc_client", None)
     key_resolver = getattr(request.app.state, "key_resolver", None)
-    user, session = process_callback(
-        db, settings, code, state, oidc_client=oidc_client, key_resolver=key_resolver
-    )
+    binding_cookie = request.cookies.get(OIDC_BINDING_COOKIE_NAME)
+
+    consumed = False
+
+    def mark_consumed() -> None:
+        nonlocal consumed
+        consumed = True
+
+    try:
+        user, session = process_callback(
+            db,
+            settings,
+            code,
+            state,
+            browser_binding_cookie=binding_cookie,
+            oidc_client=oidc_client,
+            key_resolver=key_resolver,
+            on_consumed=mark_consumed,
+        )
+    except HTTPException as exc:
+        if consumed:
+            response = JSONResponse(
+                {"detail": exc.detail},
+                status_code=exc.status_code,
+                headers=dict(exc.headers) if exc.headers else None,
+            )
+            response.delete_cookie(
+                key=OIDC_BINDING_COOKIE_NAME,
+                path="/",
+                httponly=True,
+                secure=settings.session_cookie_secure,
+                samesite="lax",
+            )
+            return response
+        raise
+    except Exception:
+        if consumed:
+            response = JSONResponse(
+                {"detail": "Authentication failed"},
+                status_code=500,
+            )
+            response.delete_cookie(
+                key=OIDC_BINDING_COOKIE_NAME,
+                path="/",
+                httponly=True,
+                secure=settings.session_cookie_secure,
+                samesite="lax",
+            )
+            return response
+        raise
 
     response = JSONResponse(
         {
@@ -67,6 +128,15 @@ def callback(
                 "department": user.department,
             },
         }
+    )
+
+    # Clear browser-binding cookie after consumption
+    response.delete_cookie(
+        key=OIDC_BINDING_COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
     )
 
     # Set Secure, HttpOnly, SameSite=Lax cookie for opaque session
@@ -289,7 +359,7 @@ def approve_system_admin_role_request(
             db.query(UserRole)
             .filter(
                 UserRole.user_id == actor_user.id,
-                UserRole.role.in_([Role.SYSTEM_ADMIN.value, "System Admin"]),
+                UserRole.role == Role.SYSTEM_ADMIN.value,
             )
             .populate_existing()
             .first()
@@ -308,7 +378,7 @@ def approve_system_admin_role_request(
             db.query(UserRole)
             .filter(
                 UserRole.user_id == req.requester_id,
-                UserRole.role.in_([Role.SYSTEM_ADMIN.value, "System Admin"]),
+                UserRole.role == Role.SYSTEM_ADMIN.value,
             )
             .first()
         )
@@ -318,7 +388,7 @@ def approve_system_admin_role_request(
             )
 
         # Revalidate target user existence
-        target_user = db.query(User).filter_by(id=req.target_user_id).first()
+        target_user = db.query(User).filter_by(id=req.target_user_id).with_for_update().first()
         if not target_user:
             raise HTTPException(status_code=404, detail="Target user not found")
 

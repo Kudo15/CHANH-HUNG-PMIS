@@ -1,3 +1,8 @@
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
 from app.auth.models import User, UserRole
 from app.auth.policy import Role
 from app.auth.session import create_session
@@ -5,10 +10,6 @@ from app.config import Settings
 from app.database import Base
 from app.main import create_app
 from app.projects.models import AuditEvent
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 
 def setup_test_env():
@@ -783,5 +784,119 @@ def test_http_authorization_matrix_tasks_ac17():
         )
         assert r_pm_trans.status_code == 200
         assert r_pm_trans.json()["status"] == "cancelled"
+    finally:
+        engine.dispose()
+
+
+def test_empty_global_roles_deny_task_endpoints():
+    app, SessionLocal, settings, engine = setup_test_env()
+    try:
+        with SessionLocal() as db:
+            pm1, s_pm1 = create_user_with_roles_and_session(
+                db, settings, "u-teg-pm1", "teg-pm1@corp.local", [Role.PROJECT_MANAGER]
+            )
+            u_empty, s_empty = create_user_and_session(
+                db, settings, "u-teg-empty", "teg-empty@corp.local", role=None
+            )
+            u_revoke, s_revoke = create_user_with_roles_and_session(
+                db, settings, "u-teg-revoke", "teg-revoke@corp.local", [Role.MEMBER]
+            )
+
+        client = TestClient(app)
+
+        # PM1 creates Project 1
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        r_p1 = client.post(
+            "/api/v1/projects",
+            json={"name": "P1 for Task Empty Roles", "lead_department_id": "dept-teg"},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        assert r_p1.status_code == 201
+        p1_id = r_p1.json()["id"]
+
+        # Assign members to Project 1
+        with SessionLocal() as db:
+            from app.projects.models import ProjectMember
+
+            db.add_all(
+                [
+                    ProjectMember(
+                        id="pm-teg-empty",
+                        project_id=p1_id,
+                        user_id=u_empty.id,
+                        role="member",
+                        assigned_by=pm1.id,
+                    ),
+                    ProjectMember(
+                        id="pm-teg-revoke",
+                        project_id=p1_id,
+                        user_id=u_revoke.id,
+                        role="member",
+                        assigned_by=pm1.id,
+                    ),
+                ]
+            )
+            db.commit()
+
+        # PM creates a task assigned to u_empty
+        r_t1 = client.post(
+            f"/api/v1/projects/{p1_id}/tasks",
+            json={"title": "Task Empty", "assignee_id": u_empty.id},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        assert r_t1.status_code == 201
+        t1_id = r_t1.json()["id"]
+
+        # PM creates a task assigned to u_revoke
+        r_t2 = client.post(
+            f"/api/v1/projects/{p1_id}/tasks",
+            json={"title": "Task Revoke", "assignee_id": u_revoke.id},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        assert r_t2.status_code == 201
+        t2_id = r_t2.json()["id"]
+
+        # 1. User with zero global roles is denied across all task endpoints
+        client.cookies.set(settings.session_cookie_name, s_empty.id)
+        assert (
+            client.post(
+                f"/api/v1/projects/{p1_id}/tasks",
+                json={"title": "Task Prohibited"},
+                headers={"X-CSRF-Token": s_empty.csrf_token},
+            ).status_code
+            == 403
+        )
+        assert client.get(f"/api/v1/projects/{p1_id}/tasks").status_code == 404
+        assert client.get(f"/api/v1/tasks/{t1_id}").status_code == 404
+        assert (
+            client.patch(
+                f"/api/v1/tasks/{t1_id}/status",
+                json={"status": "in_progress"},
+                headers={"X-CSRF-Token": s_empty.csrf_token},
+            ).status_code
+            == 403
+        )
+
+        # 2. Member before revocation can read tasks and update own task
+        client.cookies.set(settings.session_cookie_name, s_revoke.id)
+        assert client.get(f"/api/v1/projects/{p1_id}/tasks").status_code == 200
+        assert client.get(f"/api/v1/tasks/{t2_id}").status_code == 200
+
+        # Revoke user's global role
+        with SessionLocal() as db:
+            db.query(UserRole).filter_by(user_id=u_revoke.id).delete()
+            db.commit()
+
+        # Subsequent reads and status transitions deny
+        assert client.get(f"/api/v1/projects/{p1_id}/tasks").status_code == 404
+        assert client.get(f"/api/v1/tasks/{t2_id}").status_code == 404
+        assert (
+            client.patch(
+                f"/api/v1/tasks/{t2_id}/status",
+                json={"status": "in_progress"},
+                headers={"X-CSRF-Token": s_revoke.csrf_token},
+            ).status_code
+            == 403
+        )
     finally:
         engine.dispose()

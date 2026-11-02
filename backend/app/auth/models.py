@@ -141,6 +141,8 @@ class OIDCState(Base):
     redirect_uri: Mapped[str] = mapped_column(String(512), nullable=False)
     created_at: Mapped[float] = mapped_column(Float, nullable=False)
     expires_at: Mapped[float] = mapped_column(Float, nullable=False)
+    code_verifier: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    binding_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class SystemAdminRequest(Base):

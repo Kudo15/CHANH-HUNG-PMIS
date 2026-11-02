@@ -587,4 +587,426 @@ describe('CHPMIS-007 Project Workbench', () => {
     expect(screen.queryByRole('button', { name: /Lưu trữ dự án/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /Tạo công việc/i })).toBeNull()
   })
+
+  describe('CHPMIS-019-F1 safe validation errors and stale project responses', () => {
+    const mockMembersProj2 = [
+      {
+        id: 'mem-proj2-1',
+        project_id: 'proj-002',
+        user_id: 'user-pm-01',
+        role: 'project_manager',
+        assigned_by: 'user-pm-01',
+        created_at: '2026-03-01T00:00:00Z',
+        updated_at: '2026-03-01T00:00:00Z',
+      },
+    ]
+
+    const mockTasksProj2 = [
+      {
+        id: 'task-p2-01',
+        project_id: 'proj-002',
+        title: 'Thi công mố cầu Kênh Ngang',
+        description: 'Đóng cọc mố A',
+        creator_id: 'user-pm-01',
+        assignee_id: 'user-pm-01',
+        due_date: '2026-06-01T00:00:00Z',
+        status: 'open' as const,
+        created_at: '2026-03-05T00:00:00Z',
+        updated_at: '2026-03-05T00:00:00Z',
+      },
+    ]
+
+    const mockAuditProj2 = {
+      items: [
+        {
+          id: 'ae-p2-01',
+          actor_id: 'user-pm-01',
+          action: 'project:create',
+          target_type: 'project',
+          target_id: 'proj-002',
+          project_id: 'proj-002',
+          correlation_id: 'corr-p2-01',
+          created_at: '2026-03-01T00:00:00Z',
+          before_values: null,
+          after_values: { lifecycle: 'active' },
+        },
+      ],
+      next_cursor: 'cursor-p2-next',
+      has_more: false,
+    }
+
+    function createDeferred<T>() {
+      let resolve!: (value: T | PromiseLike<T>) => void
+      let reject!: (reason?: unknown) => void
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res
+        reject = rej
+      })
+      return { promise, resolve, reject }
+    }
+
+    it('safely handles FastAPI 422 array of validation objects without crashing React or leaking input', async () => {
+      const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        const method = init?.method?.toUpperCase() ?? 'GET'
+
+        if (url.includes('/api/v1/projects/proj-001/tasks') && method === 'POST') {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                detail: [
+                  {
+                    loc: ['body', 'title'],
+                    msg: 'Tiêu đề không hợp lệ',
+                    type: 'value_error',
+                    input: 'SECRET_UNTRUSTED_INPUT_ARRAY_999',
+                  },
+                ],
+              }),
+              { status: 422, headers: { 'Content-Type': 'application/json' } }
+            )
+          )
+        }
+
+        return setupDefaultFetchMock()(input, init)
+      })
+
+      vi.stubGlobal('fetch', fetchMock)
+      render(<ProjectWorkbench />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Tạo công việc/i })).toBeVisible()
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: /Tạo công việc/i }))
+      fireEvent.change(screen.getByLabelText(/Tiêu đề công việc/i), {
+        target: { value: 'Công việc test 422' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /Lưu công việc/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText(/title: Tiêu đề không hợp lệ/i)).toBeVisible()
+      })
+
+      expect(screen.queryByText(/SECRET_UNTRUSTED_INPUT_ARRAY_999/)).toBeNull()
+    })
+
+    it('safely handles FastAPI 422 object-shaped detail and falls back for malformed shapes', async () => {
+      let requestCount = 0
+      const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        const method = init?.method?.toUpperCase() ?? 'GET'
+
+        if (url.includes('/api/v1/projects/proj-001/tasks') && method === 'POST') {
+          requestCount++
+          if (requestCount === 1) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  detail: {
+                    loc: ['body', 'title'],
+                    msg: 'Độ dài tối thiểu là 5 ký tự',
+                    input: 'SECRET_UNTRUSTED_OBJECT_888',
+                  },
+                }),
+                { status: 422, headers: { 'Content-Type': 'application/json' } }
+              )
+            )
+          } else {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  detail: {
+                    input: 'SECRET_MALFORMED_INPUT_777',
+                    unknown_field: { deeply: 'nested' },
+                  },
+                }),
+                { status: 422, headers: { 'Content-Type': 'application/json' } }
+              )
+            )
+          }
+        }
+
+        return setupDefaultFetchMock()(input, init)
+      })
+
+      vi.stubGlobal('fetch', fetchMock)
+      render(<ProjectWorkbench />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Tạo công việc/i })).toBeVisible()
+      })
+
+      // 1. Object-shaped validation error
+      fireEvent.click(screen.getByRole('button', { name: /Tạo công việc/i }))
+      fireEvent.change(screen.getByLabelText(/Tiêu đề công việc/i), {
+        target: { value: 'Abc' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /Lưu công việc/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText(/title: Độ dài tối thiểu là 5 ký tự/i)).toBeVisible()
+      })
+      expect(screen.queryByText(/SECRET_UNTRUSTED_OBJECT_888/)).toBeNull()
+
+      // 2. Malformed shape error -> falls back to Vietnamese fallback message
+      fireEvent.click(screen.getByRole('button', { name: /Lưu công việc/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText('Không thể tạo công việc.')).toBeVisible()
+      })
+      expect(screen.queryByText(/SECRET_MALFORMED_INPUT_777/)).toBeNull()
+    })
+
+    it('ensures project A mutation refresh does not overwrite selected project B when A resolves late', async () => {
+      const proj1TasksDeferred = createDeferred<Response>()
+      const proj1MembersDeferred = createDeferred<Response>()
+      const proj1AuditDeferred = createDeferred<Response>()
+      const proj1DashDeferred = createDeferred<Response>()
+
+      let mutationOccurred = false
+      let refreshDashIntercepted = false
+
+      const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        const method = init?.method?.toUpperCase() ?? 'GET'
+
+        if (url.includes('/api/v1/projects/proj-001/tasks') && method === 'POST') {
+          mutationOccurred = true
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'task-new-001',
+                project_id: 'proj-001',
+                title: 'Công việc mới dự án 1',
+                status: 'open',
+              }),
+              { status: 201, headers: { 'Content-Type': 'application/json' } }
+            )
+          )
+        }
+
+        // Intercept late refresh for project 1 AFTER mutation
+        if (mutationOccurred && url.includes('/api/v1/projects/proj-001/tasks') && method === 'GET') {
+          return proj1TasksDeferred.promise
+        }
+        if (mutationOccurred && url.includes('/api/v1/projects/proj-001/members')) {
+          return proj1MembersDeferred.promise
+        }
+        if (mutationOccurred && url.includes('/api/v1/projects/proj-001/audit-events')) {
+          return proj1AuditDeferred.promise
+        }
+        if (mutationOccurred && !refreshDashIntercepted && url.includes('/api/v1/dashboard/summary')) {
+          refreshDashIntercepted = true
+          return proj1DashDeferred.promise
+        }
+
+        // Project 2 endpoints
+        if (url.includes('/api/v1/projects/proj-002/members')) {
+          return Promise.resolve(
+            new Response(JSON.stringify(mockMembersProj2), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          )
+        }
+        if (url.includes('/api/v1/projects/proj-002/tasks') && method === 'GET') {
+          return Promise.resolve(
+            new Response(JSON.stringify(mockTasksProj2), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          )
+        }
+        if (url.includes('/api/v1/projects/proj-002/audit-events')) {
+          return Promise.resolve(
+            new Response(JSON.stringify(mockAuditProj2), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          )
+        }
+
+        return setupDefaultFetchMock()(input, init)
+      })
+
+      vi.stubGlobal('fetch', fetchMock)
+      render(<ProjectWorkbench />)
+
+      // Wait for project 1 initial load
+      await waitFor(() => {
+        expect(screen.getByText('Khảo sát địa chất tuyến cống')).toBeVisible()
+      })
+
+      // Initiate task creation on project 1
+      fireEvent.click(screen.getByRole('button', { name: /Tạo công việc/i }))
+      fireEvent.change(screen.getByLabelText(/Tiêu đề công việc/i), {
+        target: { value: 'Công việc mới dự án 1' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /Lưu công việc/i }))
+
+      // Mutation is triggered, refreshProjectData('proj-001') is now pending on deferred promises
+      await waitFor(() => {
+        expect(mutationOccurred).toBe(true)
+      })
+
+      // User switches to Project B (proj-002: "Dự án Cầu Kênh Ngang")
+      const proj2Button = screen.getByRole('button', { name: /Dự án Cầu Kênh Ngang/i })
+      fireEvent.click(proj2Button)
+
+      // Project B's details resolve and render
+      await waitFor(() => {
+        expect(screen.getByText('Thi công mố cầu Kênh Ngang')).toBeVisible()
+      })
+      expect(screen.queryByText('Khảo sát địa chất tuyến cống')).toBeNull()
+
+      // Now resolve late project 1 responses
+      proj1TasksDeferred.resolve(
+        new Response(
+          JSON.stringify([
+            ...mockTasks,
+            {
+              id: 'task-new-001',
+              project_id: 'proj-001',
+              title: 'Công việc mới dự án 1',
+              status: 'open',
+            },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      proj1MembersDeferred.resolve(
+        new Response(JSON.stringify(mockMembers), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      proj1AuditDeferred.resolve(
+        new Response(JSON.stringify(mockAuditEvents), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      proj1DashDeferred.resolve(
+        new Response(JSON.stringify(mockDashboard), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+
+      // Let microtasks run; project B's view must REMAIN scoped to B
+      await waitFor(() => {
+        expect(screen.getByText('Thi công mố cầu Kênh Ngang')).toBeVisible()
+      })
+      expect(screen.queryByText('Khảo sát địa chất tuyến cống')).toBeNull()
+      expect(screen.queryByText('Công việc mới dự án 1')).toBeNull()
+      expect(screen.queryByText('corr-init-01')).toBeNull()
+      expect(screen.getByText('corr-p2-01')).toBeVisible()
+    })
+
+    it('ensures late audit pagination response for project A does not append to or overwrite selected project B', async () => {
+      const proj1PaginationDeferred = createDeferred<Response>()
+
+      const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        const method = init?.method?.toUpperCase() ?? 'GET'
+
+        if (url.includes('/api/v1/projects/proj-001/audit-events')) {
+          if (url.includes('cursor=')) {
+            // Deferred pagination request
+            return proj1PaginationDeferred.promise
+          }
+          // Initial audit request for proj-001 has more pages
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                ...mockAuditEvents,
+                has_more: true,
+                next_cursor: 'cursor-p1-page1',
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            )
+          )
+        }
+
+        // Project 2 endpoints
+        if (url.includes('/api/v1/projects/proj-002/members')) {
+          return Promise.resolve(
+            new Response(JSON.stringify(mockMembersProj2), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          )
+        }
+        if (url.includes('/api/v1/projects/proj-002/tasks') && method === 'GET') {
+          return Promise.resolve(
+            new Response(JSON.stringify(mockTasksProj2), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          )
+        }
+        if (url.includes('/api/v1/projects/proj-002/audit-events')) {
+          return Promise.resolve(
+            new Response(JSON.stringify(mockAuditProj2), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          )
+        }
+
+        return setupDefaultFetchMock()(input, init)
+      })
+
+      vi.stubGlobal('fetch', fetchMock)
+      render(<ProjectWorkbench />)
+
+      // Wait for initial load with pagination button
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Tải thêm nhật ký kiểm toán/i })).toBeVisible()
+      })
+
+      // Click load more audit on project 1
+      fireEvent.click(screen.getByRole('button', { name: /Tải thêm nhật ký kiểm toán/i }))
+
+      // Switch to project 2
+      fireEvent.click(screen.getByRole('button', { name: /Dự án Cầu Kênh Ngang/i }))
+
+      // Wait for project 2 to be rendered
+      await waitFor(() => {
+        expect(screen.getByText('corr-p2-01')).toBeVisible()
+      })
+
+      // Now resolve late pagination response for project 1
+      proj1PaginationDeferred.resolve(
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: 'ae-p1-page2',
+                actor_id: 'user-pm-01',
+                action: 'task:create',
+                target_type: 'task',
+                target_id: 'task-001',
+                project_id: 'proj-001',
+                correlation_id: 'corr-p1-page2-late',
+                created_at: '2026-01-10T00:00:00Z',
+                before_values: null,
+                after_values: { title: 'Late task' },
+              },
+            ],
+            next_cursor: 'cursor-p1-page2',
+            has_more: false,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+
+      // Project B's audit events must NOT contain project 1's late paginated item
+      await waitFor(() => {
+        expect(screen.getByText('corr-p2-01')).toBeVisible()
+      })
+      expect(screen.queryByText('corr-p1-page2-late')).toBeNull()
+    })
+  })
 })

@@ -37,21 +37,11 @@ def upgrade() -> None:
 
     # 2. Add W9 audit and boundary columns to admin_bootstrap_receipts
     with op.batch_alter_table("admin_bootstrap_receipts") as batch_op:
-        batch_op.add_column(
-            sa.Column("instance_id", sa.String(length=36), nullable=True)
-        )
-        batch_op.add_column(
-            sa.Column("request_id", sa.String(length=36), nullable=True)
-        )
-        batch_op.add_column(
-            sa.Column("operator_id", sa.String(length=100), nullable=True)
-        )
-        batch_op.add_column(
-            sa.Column("issued_at", sa.DateTime(timezone=True), nullable=True)
-        )
-        batch_op.add_column(
-            sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True)
-        )
+        batch_op.add_column(sa.Column("instance_id", sa.String(length=36), nullable=True))
+        batch_op.add_column(sa.Column("request_id", sa.String(length=36), nullable=True))
+        batch_op.add_column(sa.Column("operator_id", sa.String(length=100), nullable=True))
+        batch_op.add_column(sa.Column("issued_at", sa.DateTime(timezone=True), nullable=True))
+        batch_op.add_column(sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True))
 
     # 3. DB-level update/delete immutability protection for admin_bootstrap_receipts
     bind = op.get_bind()

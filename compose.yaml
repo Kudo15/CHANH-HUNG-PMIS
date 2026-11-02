@@ -19,6 +19,13 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL for the Compose db hostname in .env}
+      OIDC_ISSUER: http://127.0.0.1:8081/realms/chpmis-dev
+      OIDC_CLIENT_ID: pmis-local
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Set OIDC_CLIENT_SECRET in process env or .env}
+      OIDC_AUTHORIZATION_ENDPOINT: http://127.0.0.1:8081/realms/chpmis-dev/protocol/openid-connect/auth
+      OIDC_TOKEN_ENDPOINT: http://keycloak:8080/realms/chpmis-dev/protocol/openid-connect/token
+      OIDC_JWKS_URI: http://keycloak:8080/realms/chpmis-dev/protocol/openid-connect/certs
+      OIDC_REDIRECT_URI: http://127.0.0.1:8000/api/v1/auth/callback
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

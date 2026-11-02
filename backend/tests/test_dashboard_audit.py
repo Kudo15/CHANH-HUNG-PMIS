@@ -2,6 +2,11 @@ import base64
 import json
 from datetime import datetime, timedelta, timezone
 
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
 from app.auth.models import User, UserRole
 from app.auth.policy import Role
 from app.auth.session import create_session
@@ -11,10 +16,6 @@ from app.main import create_app
 from app.projects.models import AuditEvent, Project, ProjectMember, Task, utc_now
 from app.projects.schemas import TaskStatus
 from app.projects.service import is_task_overdue
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 
 def setup_test_env():
@@ -1212,5 +1213,96 @@ def test_http_authorization_matrix_dashboard_and_audit_ac17():
         for s_user in (s_sa_pm, s_pm_mem, s_mem_aud, s_unassigned, s_dept_only):
             client.cookies.set(settings.session_cookie_name, s_user.id)
             assert client.get(f"/api/v1/projects/{p1_id}/audit-events").status_code == 404
+    finally:
+        engine.dispose()
+
+
+def test_empty_global_roles_deny_dashboard_and_audit_reads():
+    app, SessionLocal, settings, engine = setup_test_env()
+    try:
+        with SessionLocal() as db:
+            pm1, s_pm1 = create_user_with_roles_and_session(
+                db, settings, "u-da-pm1", "da-pm1@corp.local", [Role.PROJECT_MANAGER]
+            )
+            u_empty, s_empty = create_user_and_session(
+                db, settings, "u-da-empty", "da-empty@corp.local", role=None
+            )
+            u_revoke, s_revoke = create_user_with_roles_and_session(
+                db, settings, "u-da-revoke", "da-revoke@corp.local", [Role.PROJECT_MANAGER]
+            )
+
+        client = TestClient(app)
+
+        # PM1 creates Project 1
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        r_p1 = client.post(
+            "/api/v1/projects",
+            json={"name": "P1 for Dashboard Audit Roles", "lead_department_id": "dept-da"},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        assert r_p1.status_code == 201
+        p1_id = r_p1.json()["id"]
+
+        # Create a task in P1
+        r_t1 = client.post(
+            f"/api/v1/projects/{p1_id}/tasks",
+            json={"title": "Task 1", "assignee_id": pm1.id},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        assert r_t1.status_code == 201
+
+        # Assign both users to Project 1 (PM role in project membership)
+        with SessionLocal() as db:
+            db.add_all(
+                [
+                    ProjectMember(
+                        id="pm-da-empty",
+                        project_id=p1_id,
+                        user_id=u_empty.id,
+                        role="project_manager",
+                        assigned_by=pm1.id,
+                    ),
+                    ProjectMember(
+                        id="pm-da-revoke",
+                        project_id=p1_id,
+                        user_id=u_revoke.id,
+                        role="project_manager",
+                        assigned_by=pm1.id,
+                    ),
+                ]
+            )
+            db.commit()
+
+        # 1. User with zero global roles gets empty summary and denied audit read
+        client.cookies.set(settings.session_cookie_name, s_empty.id)
+        d_empty = client.get("/api/v1/dashboard/summary").json()
+        assert d_empty["total_projects"] == 0
+        assert d_empty["total_tasks"] == 0
+        assert d_empty["total_overdue_tasks"] == 0
+        assert d_empty["projects"] == []
+
+        assert client.get(f"/api/v1/projects/{p1_id}/audit-events").status_code == 404
+
+        # 2. Revoke user's final global role while leaving project membership intact
+        client.cookies.set(settings.session_cookie_name, s_revoke.id)
+        # Prior to revocation, PM user can see dashboard counts and audit events
+        d_pre = client.get("/api/v1/dashboard/summary").json()
+        assert d_pre["total_projects"] == 1
+        assert d_pre["total_tasks"] == 1
+        assert len(d_pre["projects"]) == 1
+        assert client.get(f"/api/v1/projects/{p1_id}/audit-events").status_code == 200
+
+        # Revoke final global role in DB
+        with SessionLocal() as db:
+            db.query(UserRole).filter_by(user_id=u_revoke.id).delete()
+            db.commit()
+
+        # Subsequent dashboard and audit reads disclose no business data
+        d_post = client.get("/api/v1/dashboard/summary").json()
+        assert d_post["total_projects"] == 0
+        assert d_post["total_tasks"] == 0
+        assert d_post["total_overdue_tasks"] == 0
+        assert d_post["projects"] == []
+        assert client.get(f"/api/v1/projects/{p1_id}/audit-events").status_code == 404
     finally:
         engine.dispose()

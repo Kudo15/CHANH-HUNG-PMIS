@@ -1,3 +1,8 @@
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
 from app.auth.models import User, UserRole
 from app.auth.policy import Role
 from app.auth.session import create_session
@@ -5,10 +10,6 @@ from app.config import Settings
 from app.database import Base
 from app.main import create_app
 from app.projects.models import AuditEvent, Project, ProjectMember, Task
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 
 def setup_test_env():
@@ -833,6 +834,126 @@ def test_http_authorization_matrix_projects_ac17():
                 headers={"X-CSRF-Token": s_pm1.csrf_token},
             ).status_code
             == 200
+        )
+    finally:
+        engine.dispose()
+
+
+def test_empty_global_roles_deny_project_reads_and_detail_endpoints():
+    app, SessionLocal, settings, engine = setup_test_env()
+    try:
+        with SessionLocal() as db:
+            pm1, s_pm1 = create_user_with_roles_and_session(
+                db, settings, "u-egr-pm1", "egr-pm1@corp.local", [Role.PROJECT_MANAGER]
+            )
+            # User with active session but zero UserRole rows
+            u_empty, s_empty = create_user_and_session(
+                db, settings, "u-egr-empty", "egr-empty@corp.local", role=None
+            )
+            # User with active session and initial global role to test revocation
+            u_revoke, s_revoke = create_user_with_roles_and_session(
+                db, settings, "u-egr-revoke", "egr-revoke@corp.local", [Role.MEMBER]
+            )
+            target_u, _ = create_user_with_roles_and_session(
+                db, settings, "u-egr-target", "egr-target@corp.local", [Role.MEMBER]
+            )
+
+        client = TestClient(app)
+
+        # PM1 creates Project 1
+        client.cookies.set(settings.session_cookie_name, s_pm1.id)
+        r_p1 = client.post(
+            "/api/v1/projects",
+            json={"name": "P1 for Empty Global Roles", "lead_department_id": "dept-egr"},
+            headers={"X-CSRF-Token": s_pm1.csrf_token},
+        )
+        assert r_p1.status_code == 201
+        p1_id = r_p1.json()["id"]
+
+        # Assign both users as members of Project 1
+        with SessionLocal() as db:
+            db.add_all(
+                [
+                    ProjectMember(
+                        id="pm-egr-empty",
+                        project_id=p1_id,
+                        user_id=u_empty.id,
+                        role="member",
+                        assigned_by=pm1.id,
+                    ),
+                    ProjectMember(
+                        id="pm-egr-revoke",
+                        project_id=p1_id,
+                        user_id=u_revoke.id,
+                        role="member",
+                        assigned_by=pm1.id,
+                    ),
+                ]
+            )
+            db.commit()
+
+        # 1. User with zero global roles cannot list or read business project data
+        client.cookies.set(settings.session_cookie_name, s_empty.id)
+
+        # GET /api/v1/projects must disclose no rows
+        r_list = client.get("/api/v1/projects")
+        assert r_list.status_code == 200
+        assert r_list.json() == []
+
+        # Detail, member list, and mutation endpoints must deny under zero global roles
+        assert client.get(f"/api/v1/projects/{p1_id}").status_code == 404
+        assert client.get(f"/api/v1/projects/{p1_id}/members").status_code == 404
+        assert (
+            client.post(
+                "/api/v1/projects",
+                json={"name": "Forbidden Project", "lead_department_id": "dept-egr"},
+                headers={"X-CSRF-Token": s_empty.csrf_token},
+            ).status_code
+            == 403
+        )
+        assert (
+            client.post(
+                f"/api/v1/projects/{p1_id}/members",
+                json={"user_id": target_u.id, "role": "member"},
+                headers={"X-CSRF-Token": s_empty.csrf_token},
+            ).status_code
+            == 403
+        )
+        assert (
+            client.post(
+                f"/api/v1/projects/{p1_id}/archive",
+                headers={"X-CSRF-Token": s_empty.csrf_token},
+            ).status_code
+            == 403
+        )
+
+        # 2. Revoke user's final global role while leaving project membership intact
+        client.cookies.set(settings.session_cookie_name, s_revoke.id)
+        # Prior to revocation, member can list and view details of p1
+        r_pre = client.get("/api/v1/projects")
+        assert r_pre.status_code == 200
+        assert len(r_pre.json()) == 1
+        assert r_pre.json()[0]["id"] == p1_id
+        assert client.get(f"/api/v1/projects/{p1_id}").status_code == 200
+
+        # Revoke final global role in DB
+        with SessionLocal() as db:
+            db.query(UserRole).filter_by(user_id=u_revoke.id).delete()
+            db.commit()
+
+        # Subsequent list and detail reads disclose no business data
+        r_post = client.get("/api/v1/projects")
+        assert r_post.status_code == 200
+        assert r_post.json() == []
+        assert client.get(f"/api/v1/projects/{p1_id}").status_code == 404
+        assert client.get(f"/api/v1/projects/{p1_id}/members").status_code == 404
+        assert (
+            client.post(
+                "/api/v1/projects",
+                json={"name": "Forbidden Project Revoked", "lead_department_id": "dept-egr"},
+                headers={"X-CSRF-Token": s_revoke.csrf_token},
+            ).status_code
+            == 403
         )
     finally:
         engine.dispose()

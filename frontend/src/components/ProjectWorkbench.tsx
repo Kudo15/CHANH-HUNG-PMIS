@@ -1,4 +1,5 @@
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
+import { formatApiError } from '../lib/apiError'
 
 export interface User {
   id: string
@@ -102,6 +103,11 @@ export function ProjectWorkbench() {
   const [projects, setProjects] = useState<ProjectItem[]>([])
   const [projectSearch, setProjectSearch] = useState<string>('')
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const selectedProjectIdRef = useRef<string | null>(selectedProjectId)
+
+  useEffect(() => {
+    selectedProjectIdRef.current = selectedProjectId
+  }, [selectedProjectId])
 
   const [members, setMembers] = useState<ProjectMember[]>([])
   const [tasks, setTasks] = useState<TaskItem[]>([])
@@ -218,38 +224,48 @@ export function ProjectWorkbench() {
         fetch(`/api/v1/projects/${projectId}/audit-events?limit=20`, { credentials: 'include' }),
       ])
 
+      if (selectedProjectIdRef.current !== projectId) return
+
       if (membersRes.ok) {
         const membersData: ProjectMember[] = await membersRes.json()
+        if (selectedProjectIdRef.current !== projectId) return
         setMembers(membersData)
       } else {
+        if (selectedProjectIdRef.current !== projectId) return
         setMembers([])
       }
 
       if (tasksRes.ok) {
         const tasksData: TaskItem[] = await tasksRes.json()
+        if (selectedProjectIdRef.current !== projectId) return
         setTasks(tasksData)
       } else {
+        if (selectedProjectIdRef.current !== projectId) return
         setTasks([])
       }
 
       if (dashRes.ok) {
         const dashData: DashboardSummaryResponse = await dashRes.json()
+        if (selectedProjectIdRef.current !== projectId) return
         setDashboardSummary(dashData)
       }
 
       if (auditRes.ok) {
         const auditData: AuditEventListResponse = await auditRes.json()
+        if (selectedProjectIdRef.current !== projectId) return
         setAuditEvents(auditData.items)
         setNextCursor(auditData.next_cursor)
         setHasMoreAudit(auditData.has_more)
         setAuditAccessDenied(false)
       } else {
+        if (selectedProjectIdRef.current !== projectId) return
         setAuditEvents([])
         setNextCursor(null)
         setHasMoreAudit(false)
         setAuditAccessDenied(true)
       }
     } catch {
+      if (selectedProjectIdRef.current !== projectId) return
       setMembers([])
       setTasks([])
       setAuditEvents([])
@@ -356,13 +372,16 @@ export function ProjectWorkbench() {
   // Load more audit events
   const handleLoadMoreAudit = async () => {
     if (!selectedProjectId || !nextCursor) return
+    const currentProject = selectedProjectId
     try {
       const auditRes = await fetch(
-        `/api/v1/projects/${selectedProjectId}/audit-events?limit=20&cursor=${encodeURIComponent(nextCursor)}`,
+        `/api/v1/projects/${currentProject}/audit-events?limit=20&cursor=${encodeURIComponent(nextCursor)}`,
         { credentials: 'include' }
       )
+      if (selectedProjectIdRef.current !== currentProject) return
       if (auditRes.ok) {
         const auditData: AuditEventListResponse = await auditRes.json()
+        if (selectedProjectIdRef.current !== currentProject) return
         setAuditEvents((prev) => [...prev, ...auditData.items])
         setNextCursor(auditData.next_cursor)
         setHasMoreAudit(auditData.has_more)
@@ -408,7 +427,7 @@ export function ProjectWorkbench() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => null)
-        setActionError(errorData?.detail ?? 'Không thể tạo dự án.')
+        setActionError(formatApiError(errorData?.detail ?? errorData, 'Không thể tạo dự án.'))
         return
       }
 
@@ -442,6 +461,8 @@ export function ProjectWorkbench() {
       return
     }
 
+    const currentProjectId = selectedProjectId
+
     try {
       setIsSubmittingTask(true)
       setActionError(null)
@@ -453,7 +474,7 @@ export function ProjectWorkbench() {
         due_date: taskDueDate ? new Date(taskDueDate).toISOString() : null,
       }
 
-      const res = await fetch(`/api/v1/projects/${selectedProjectId}/tasks`, {
+      const res = await fetch(`/api/v1/projects/${currentProjectId}/tasks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -465,7 +486,7 @@ export function ProjectWorkbench() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => null)
-        setActionError(errorData?.detail ?? 'Không thể tạo công việc.')
+        setActionError(formatApiError(errorData?.detail ?? errorData, 'Không thể tạo công việc.'))
         return
       }
 
@@ -477,7 +498,7 @@ export function ProjectWorkbench() {
       setTaskDueDate('')
       setShowCreateTask(false)
 
-      await refreshProjectData(selectedProjectId)
+      await refreshProjectData(currentProjectId)
     } catch {
       setActionError('Lỗi kết nối máy chủ khi tạo công việc.')
     } finally {
@@ -495,6 +516,8 @@ export function ProjectWorkbench() {
       return
     }
 
+    const currentProjectId = selectedProjectId
+
     try {
       setActionError(null)
       const res = await fetch(`/api/v1/tasks/${taskId}/status`, {
@@ -509,12 +532,12 @@ export function ProjectWorkbench() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => null)
-        setActionError(err?.detail ?? 'Chuyển trạng thái công việc thất bại.')
+        setActionError(formatApiError(err?.detail ?? err, 'Chuyển trạng thái công việc thất bại.'))
         return
       }
 
       setActionSuccess(`Đã cập nhật trạng thái công việc sang: ${targetStatus}`)
-      await refreshProjectData(selectedProjectId)
+      await refreshProjectData(currentProjectId)
     } catch {
       setActionError('Lỗi kết nối khi cập nhật trạng thái công việc.')
     }
@@ -527,11 +550,13 @@ export function ProjectWorkbench() {
       return
     }
 
+    const currentProjectId = selectedProjectId
+
     try {
       setIsArchiving(true)
       setActionError(null)
 
-      const res = await fetch(`/api/v1/projects/${selectedProjectId}/archive`, {
+      const res = await fetch(`/api/v1/projects/${currentProjectId}/archive`, {
         method: 'POST',
         headers: {
           'X-CSRF-Token': session.csrf_token,
@@ -541,7 +566,7 @@ export function ProjectWorkbench() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => null)
-        setActionError(err?.detail ?? 'Không thể lưu trữ dự án.')
+        setActionError(formatApiError(err?.detail ?? err, 'Không thể lưu trữ dự án.'))
         return
       }
 
@@ -549,7 +574,7 @@ export function ProjectWorkbench() {
       setActionSuccess('Dự án đã được lưu trữ thành công.')
       setConfirmingArchive(false)
       setProjects((prev) => prev.map((p) => (p.id === updatedProject.id ? updatedProject : p)))
-      await refreshProjectData(selectedProjectId)
+      await refreshProjectData(currentProjectId)
     } catch {
       setActionError('Lỗi kết nối máy chủ khi lưu trữ dự án.')
     } finally {

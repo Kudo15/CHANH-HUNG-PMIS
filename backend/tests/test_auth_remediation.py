@@ -20,6 +20,7 @@ from app.auth.bootstrap_admins import (
     REGISTRY_TRUST_KEY_PATH,
     VAL_PROJECT_OWNER,
     VAL_SECURITY_REVIEWER,
+    BootstrapError,
     SyntheticRegistryBackend,
     bootstrap_initial_admins,
     create_canonical_payload,
@@ -926,5 +927,429 @@ def test_system_admin_approval_revalidates_approver_authority_during_decision(mo
                 )
             )
             db.commit()
+    finally:
+        engine.dispose()
+
+
+def test_legacy_role_requester_cannot_authorize_approval():
+    """Verify a requester with only legacy 'System Admin' row cannot authorize approval.
+
+    Behavior 1:
+    A canonical requester creates a request, then loses the canonical role and receives only
+    a legacy 'System Admin' row. A different currently authorized canonical admin attempts
+    approval; approval is rejected (403) and the request remains pending with no target
+    role or session side effect.
+    """
+    app, TestingSessionLocal, settings, engine = get_test_setup()
+    try:
+        with TestingSessionLocal() as db:
+            admin1 = User(
+                id="adm_req",
+                sub="s_req",
+                email="req@test.com",
+                name="Requester Admin",
+                is_active=True,
+            )
+            admin2 = User(
+                id="adm_app",
+                sub="s_app",
+                email="app@test.com",
+                name="Approver Admin",
+                is_active=True,
+            )
+            target = User(
+                id="usr_tgt",
+                sub="s_tgt",
+                email="tgt@test.com",
+                name="Target User",
+                is_active=True,
+            )
+            db.add_all([admin1, admin2, target])
+            db.commit()
+
+            db.add(
+                UserRole(id="r_req", user_id="adm_req", role=Role.SYSTEM_ADMIN, granted_by="seed")
+            )
+            db.add(
+                UserRole(id="r_app", user_id="adm_app", role=Role.SYSTEM_ADMIN, granted_by="seed")
+            )
+            db.commit()
+
+            sess_app = create_session(db, admin2.id, settings)
+            app_cookie = sess_app.id
+            app_csrf = sess_app.csrf_token
+
+            target_sess = create_session(db, target.id, settings)
+            target_sess_id = target_sess.id
+
+            req = SystemAdminRequest(
+                id="req-legacy-requester",
+                target_user_id="usr_tgt",
+                action="grant",
+                status="pending",
+                requester_id="adm_req",
+            )
+            db.add(req)
+            db.commit()
+
+            # Requester loses canonical role and receives only legacy 'System Admin' row
+            db.query(UserRole).filter_by(user_id="adm_req", role=Role.SYSTEM_ADMIN).delete()
+            db.add(
+                UserRole(
+                    id="r_req_legacy",
+                    user_id="adm_req",
+                    role="System Admin",
+                    granted_by="seed",
+                )
+            )
+            db.commit()
+
+        client = TestClient(app)
+        client.cookies.set("pmis_session", app_cookie)
+
+        resp = client.post(
+            "/api/v1/auth/roles/system-admin/approve",
+            json={"request_id": "req-legacy-requester"},
+            headers={"X-CSRF-Token": app_csrf},
+        )
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Requester is no longer an active System Admin"
+
+        with TestingSessionLocal() as db:
+            r = db.query(SystemAdminRequest).filter_by(id="req-legacy-requester").first()
+            assert r is not None
+            assert r.status == "pending"
+            assert r.approver_id is None
+            assert r.decided_at is None
+            assert (
+                db.query(UserRole).filter_by(user_id="usr_tgt", role=Role.SYSTEM_ADMIN).first()
+                is None
+            )
+            tgt_s = db.query(Session).filter_by(id=target_sess_id).first()
+            assert tgt_s is not None
+            assert tgt_s.is_revoked is False
+    finally:
+        engine.dispose()
+
+
+def test_legacy_role_approver_cannot_authorize_approval(monkeypatch):
+    """Verify a legacy-only approver cannot establish decision authority.
+
+    Behavior 2:
+    A legacy-only approver cannot establish decision authority even when the request
+    is otherwise pending; verify state remains unchanged.
+    Tests both:
+    - Approver with only legacy 'System Admin' row at session time
+    - Approver whose canonical role is swapped to legacy 'System Admin' during decision time
+    """
+    app, TestingSessionLocal, settings, engine = get_test_setup()
+    try:
+        with TestingSessionLocal() as db:
+            admin1 = User(
+                id="adm_req",
+                sub="s_req",
+                email="req@test.com",
+                name="Requester Admin",
+                is_active=True,
+            )
+            admin2 = User(
+                id="adm_app",
+                sub="s_app",
+                email="app@test.com",
+                name="Approver Admin",
+                is_active=True,
+            )
+            admin_legacy = User(
+                id="adm_leg",
+                sub="s_leg",
+                email="leg@test.com",
+                name="Legacy Admin",
+                is_active=True,
+            )
+            target = User(
+                id="usr_tgt",
+                sub="s_tgt",
+                email="tgt@test.com",
+                name="Target User",
+                is_active=True,
+            )
+            db.add_all([admin1, admin2, admin_legacy, target])
+            db.commit()
+
+            db.add(
+                UserRole(id="r_req", user_id="adm_req", role=Role.SYSTEM_ADMIN, granted_by="seed")
+            )
+            db.add(
+                UserRole(id="r_app", user_id="adm_app", role=Role.SYSTEM_ADMIN, granted_by="seed")
+            )
+            db.add(
+                UserRole(
+                    id="r_leg",
+                    user_id="adm_leg",
+                    role="System Admin",
+                    granted_by="seed",
+                )
+            )
+            db.commit()
+
+            sess_app = create_session(db, admin2.id, settings)
+            app_cookie = sess_app.id
+            app_csrf = sess_app.csrf_token
+
+            sess_leg = create_session(db, admin_legacy.id, settings)
+            leg_cookie = sess_leg.id
+            leg_csrf = sess_leg.csrf_token
+
+            target_sess = create_session(db, target.id, settings)
+            target_sess_id = target_sess.id
+
+            req1 = SystemAdminRequest(
+                id="req-legacy-approver-static",
+                target_user_id="usr_tgt",
+                action="grant",
+                status="pending",
+                requester_id="adm_req",
+            )
+            req2 = SystemAdminRequest(
+                id="req-legacy-approver-dynamic",
+                target_user_id="usr_tgt",
+                action="grant",
+                status="pending",
+                requester_id="adm_req",
+            )
+            db.add_all([req1, req2])
+            db.commit()
+
+        # Case 2A: Approver with only legacy row attempts approval
+        leg_client = TestClient(app)
+        leg_client.cookies.set("pmis_session", leg_cookie)
+        resp_leg = leg_client.post(
+            "/api/v1/auth/roles/system-admin/approve",
+            json={"request_id": "req-legacy-approver-static"},
+            headers={"X-CSRF-Token": leg_csrf},
+        )
+        assert resp_leg.status_code == 403
+        with TestingSessionLocal() as db:
+            r1 = db.query(SystemAdminRequest).filter_by(id="req-legacy-approver-static").first()
+            assert r1 is not None
+            assert r1.status == "pending"
+            assert r1.approver_id is None
+            assert (
+                db.query(UserRole).filter_by(user_id="usr_tgt", role=Role.SYSTEM_ADMIN).first()
+                is None
+            )
+
+        # Case 2B: Approver's canonical role transitions to legacy-only at decision time
+        import app.auth.routes as auth_routes
+
+        real_validate_session = auth_routes.validate_session
+        swap_hook_active = False
+
+        def wrapped_validate_session(db, session_id, settings_arg):
+            session, actor_user, actor_roles = real_validate_session(db, session_id, settings_arg)
+            if swap_hook_active:
+                with TestingSessionLocal() as mutate_db:
+                    mutate_db.query(UserRole).filter_by(
+                        user_id="adm_app", role=Role.SYSTEM_ADMIN
+                    ).delete()
+                    mutate_db.add(
+                        UserRole(
+                            id="r_app_legacy",
+                            user_id="adm_app",
+                            role="System Admin",
+                            granted_by="seed",
+                        )
+                    )
+                    mutate_db.commit()
+            return session, actor_user, actor_roles
+
+        monkeypatch.setattr(auth_routes, "validate_session", wrapped_validate_session)
+        swap_hook_active = True
+
+        client = TestClient(app)
+        client.cookies.set("pmis_session", app_cookie)
+        resp = client.post(
+            "/api/v1/auth/roles/system-admin/approve",
+            json={"request_id": "req-legacy-approver-dynamic"},
+            headers={"X-CSRF-Token": app_csrf},
+        )
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Approver must be an active System Admin"
+
+        with TestingSessionLocal() as db:
+            r2 = db.query(SystemAdminRequest).filter_by(id="req-legacy-approver-dynamic").first()
+            assert r2 is not None
+            assert r2.status == "pending"
+            assert r2.approver_id is None
+            assert r2.decided_at is None
+            assert (
+                db.query(UserRole).filter_by(user_id="usr_tgt", role=Role.SYSTEM_ADMIN).first()
+                is None
+            )
+            tgt_s = db.query(Session).filter_by(id=target_sess_id).first()
+            assert tgt_s is not None
+            assert tgt_s.is_revoked is False
+    finally:
+        engine.dispose()
+
+
+def test_legacy_role_canonical_requester_and_approver_succeed_under_hg2():
+    """Verify canonical requester and approver continue to work under existing HG2 policy.
+
+    Behavior 3:
+    Canonical current requester and approver continue to work under the existing HG2 policy.
+    """
+    app, TestingSessionLocal, settings, engine = get_test_setup()
+    try:
+        with TestingSessionLocal() as db:
+            admin1 = User(
+                id="adm_req",
+                sub="s_req",
+                email="req@test.com",
+                name="Requester Admin",
+                is_active=True,
+            )
+            admin2 = User(
+                id="adm_app",
+                sub="s_app",
+                email="app@test.com",
+                name="Approver Admin",
+                is_active=True,
+            )
+            target = User(
+                id="usr_tgt",
+                sub="s_tgt",
+                email="tgt@test.com",
+                name="Target User",
+                is_active=True,
+            )
+            db.add_all([admin1, admin2, target])
+            db.commit()
+
+            db.add(
+                UserRole(id="r_req", user_id="adm_req", role=Role.SYSTEM_ADMIN, granted_by="seed")
+            )
+            db.add(
+                UserRole(id="r_app", user_id="adm_app", role=Role.SYSTEM_ADMIN, granted_by="seed")
+            )
+            db.commit()
+
+            sess_app = create_session(db, admin2.id, settings)
+            app_cookie = sess_app.id
+            app_csrf = sess_app.csrf_token
+
+            target_sess = create_session(db, target.id, settings)
+            target_sess_id = target_sess.id
+
+            req = SystemAdminRequest(
+                id="req-canonical-hg2",
+                target_user_id="usr_tgt",
+                action="grant",
+                status="pending",
+                requester_id="adm_req",
+            )
+            db.add(req)
+            db.commit()
+
+        client = TestClient(app)
+        client.cookies.set("pmis_session", app_cookie)
+        resp = client.post(
+            "/api/v1/auth/roles/system-admin/approve",
+            json={"request_id": "req-canonical-hg2"},
+            headers={"X-CSRF-Token": app_csrf},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "approved"
+        assert data["request_id"] == "req-canonical-hg2"
+
+        with TestingSessionLocal() as db:
+            r = db.query(SystemAdminRequest).filter_by(id="req-canonical-hg2").first()
+            assert r is not None
+            assert r.status == "approved"
+            assert r.approver_id == "adm_app"
+            assert r.decided_at is not None
+            granted_role = (
+                db.query(UserRole).filter_by(user_id="usr_tgt", role=Role.SYSTEM_ADMIN).first()
+            )
+            assert granted_role is not None
+            assert granted_role.role == Role.SYSTEM_ADMIN.value
+            tgt_s = db.query(Session).filter_by(id=target_sess_id).first()
+            assert tgt_s is not None
+            assert tgt_s.is_revoked is True
+    finally:
+        engine.dispose()
+
+
+def test_legacy_role_blocks_bootstrap_guard():
+    """Verify bootstrap guard continues to detect legacy rows and block bootstrap.
+
+    Behavior 4:
+    Bootstrap guard continues to detect legacy rows as a reason to block bootstrap;
+    do not migrate them into authority.
+    """
+    app, TestingSessionLocal, settings, engine = get_test_setup()
+    try:
+        po_priv, po_bytes = generate_ed25519_keypair()
+        sr_priv, sr_bytes = generate_ed25519_keypair()
+        backend = make_valid_synthetic_registry(po_bytes, sr_bytes)
+
+        with TestingSessionLocal() as db:
+            inst = get_or_create_instance_state(db)
+            legacy_user = User(
+                id="u_legacy",
+                sub="s_legacy",
+                email="legacy@test.com",
+                name="Legacy User",
+                is_active=True,
+            )
+            db.add(legacy_user)
+            db.commit()
+
+            # Insert inert legacy display-value System Admin row
+            db.add(
+                UserRole(
+                    id="r_legacy_guard",
+                    user_id="u_legacy",
+                    role="System Admin",
+                    granted_by="seed",
+                )
+            )
+            db.commit()
+
+            now = datetime.now(timezone.utc)
+            payload_data = {
+                "action": "bootstrap_initial_admins",
+                "environment": "development",
+                "target_subs": ["boot-admin-1", "boot-admin-2"],
+                "instance_id": inst.instance_id,
+                "request_id": str(uuid.uuid4()),
+                "operator_id": "synthetic-operator-1",
+                "issued_at": (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "expires_at": (now + timedelta(hours=5)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+            canonical_bytes = create_canonical_payload(
+                payload_data["environment"],
+                payload_data["target_subs"],
+                instance_id=payload_data["instance_id"],
+                request_id=payload_data["request_id"],
+                operator_id=payload_data["operator_id"],
+                issued_at=payload_data["issued_at"],
+                expires_at=payload_data["expires_at"],
+            )
+            po_sig_b64 = sign_ed25519_payload(po_priv, canonical_bytes)
+            sr_sig_b64 = sign_ed25519_payload(sr_priv, canonical_bytes)
+
+            with pytest.raises(BootstrapError, match="System Admin already exists"):
+                bootstrap_initial_admins(
+                    db,
+                    payload_data=payload_data,
+                    approvals={
+                        "project_owner": po_sig_b64,
+                        "security_reviewer": sr_sig_b64,
+                    },
+                    now=now,
+                    _registry_backend=backend,
+                )
     finally:
         engine.dispose()

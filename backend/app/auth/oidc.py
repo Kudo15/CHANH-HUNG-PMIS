@@ -1,9 +1,12 @@
+import base64
+import hashlib
+import hmac
 import json
 import secrets
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from urllib.parse import urlencode
 
 import jwt
@@ -13,6 +16,21 @@ from sqlalchemy.orm import Session as DBSession
 from app.auth.models import OIDCState, User
 from app.auth.session import SessionModel, create_session
 from app.config import Settings
+
+OIDC_BINDING_COOKIE_NAME = "pmis_oidc_bind"
+
+
+def generate_code_verifier() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def generate_code_challenge(verifier: str) -> str:
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+
+def hash_browser_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class KeyResolver(Protocol):
@@ -135,7 +153,9 @@ def decode_and_verify_id_token(
 
 
 class OIDCClient(Protocol):
-    def exchange_code(self, code: str, redirect_uri: str) -> dict[str, Any]: ...
+    def exchange_code(
+        self, code: str, redirect_uri: str, code_verifier: str | None = None
+    ) -> dict[str, Any]: ...
 
 
 class MockOIDCClient:
@@ -154,7 +174,9 @@ class MockOIDCClient:
     def set_mock_id_token(self, id_token: str) -> None:
         self.id_token = id_token
 
-    def exchange_code(self, code: str, redirect_uri: str) -> dict[str, Any]:
+    def exchange_code(
+        self, code: str, redirect_uri: str, code_verifier: str | None = None
+    ) -> dict[str, Any]:
         if not self.id_token:
             raise RuntimeError("MockOIDCClient has no signed id_token configured for exchange")
         return {
@@ -170,7 +192,9 @@ class DefaultOIDCClient:
     def __init__(self, settings: Settings):
         self.settings = settings
 
-    def exchange_code(self, code: str, redirect_uri: str) -> dict[str, Any]:
+    def exchange_code(
+        self, code: str, redirect_uri: str, code_verifier: str | None = None
+    ) -> dict[str, Any]:
         if not self.settings.oidc_token_endpoint or not self.settings.oidc_client_id:
             raise HTTPException(
                 status_code=500,
@@ -183,6 +207,8 @@ class DefaultOIDCClient:
             "redirect_uri": redirect_uri,
             "client_id": self.settings.oidc_client_id,
         }
+        if code_verifier:
+            data["code_verifier"] = code_verifier
         if self.settings.oidc_client_secret:
             data["client_secret"] = self.settings.oidc_client_secret.get_secret_value()
 
@@ -236,7 +262,7 @@ class DefaultOIDCClient:
         return token_response
 
 
-def initiate_login(db: DBSession, settings: Settings) -> str:
+def initiate_login_transaction(db: DBSession, settings: Settings) -> tuple[str, str]:
     if not settings.oidc_authorization_endpoint or not settings.oidc_client_id:
         raise HTTPException(status_code=500, detail="OIDC provider endpoints are not configured")
 
@@ -246,6 +272,11 @@ def initiate_login(db: DBSession, settings: Settings) -> str:
 
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
+    code_verifier = generate_code_verifier()
+    code_challenge = generate_code_challenge(code_verifier)
+    browser_token = secrets.token_urlsafe(32)
+    binding_digest = hash_browser_token(browser_token)
+
     expires_at = now + 600.0  # 10-minute state lifetime
     effective_redirect_uri = settings.oidc_redirect_uri
 
@@ -255,6 +286,8 @@ def initiate_login(db: DBSession, settings: Settings) -> str:
         redirect_uri=effective_redirect_uri,
         created_at=now,
         expires_at=expires_at,
+        code_verifier=code_verifier,
+        binding_digest=binding_digest,
     )
     db.add(oidc_state)
     db.commit()
@@ -266,8 +299,15 @@ def initiate_login(db: DBSession, settings: Settings) -> str:
         "scope": "openid profile email",
         "state": state,
         "nonce": nonce,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     }
-    return f"{settings.oidc_authorization_endpoint}?{urlencode(params)}"
+    return f"{settings.oidc_authorization_endpoint}?{urlencode(params)}", browser_token
+
+
+def initiate_login(db: DBSession, settings: Settings) -> str:
+    auth_url, _ = initiate_login_transaction(db, settings)
+    return auth_url
 
 
 def process_callback(
@@ -275,8 +315,10 @@ def process_callback(
     settings: Settings,
     code: str,
     state: str,
+    browser_binding_cookie: str | None = None,
     oidc_client: OIDCClient | None = None,
     key_resolver: Any | None = None,
+    on_consumed: Callable[[], None] | None = None,
 ) -> tuple[User, SessionModel]:
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing authorization code or state")
@@ -291,15 +333,38 @@ def process_callback(
         db.commit()
         raise HTTPException(status_code=400, detail="OIDC state has expired")
 
+    # Legacy or incomplete transaction fails closed
+    if not stored_state.code_verifier or not stored_state.binding_digest:
+        db.delete(stored_state)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Legacy or incomplete OIDC transaction")
+
+    # Browser-binding verification before token exchange
+    if not browser_binding_cookie:
+        raise HTTPException(status_code=400, detail="Missing browser binding cookie")
+
+    token_digest = hash_browser_token(browser_binding_cookie)
+    if not hmac.compare_digest(stored_state.binding_digest, token_digest):
+        raise HTTPException(status_code=400, detail="Invalid browser binding cookie")
+
     nonce = stored_state.nonce
     redirect_uri = stored_state.redirect_uri
+    code_verifier = stored_state.code_verifier
 
-    # One-time use: consume state immediately
-    db.delete(stored_state)
+    # One-time use: atomic conditional claim / delete
+    affected = (
+        db.query(OIDCState).filter(OIDCState.state == state).delete(synchronize_session=False)
+    )
+    if affected != 1:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Invalid or missing state")
     db.commit()
 
+    if on_consumed is not None:
+        on_consumed()
+
     client = oidc_client or DefaultOIDCClient(settings)
-    token_response = client.exchange_code(code, redirect_uri)
+    token_response = client.exchange_code(code, redirect_uri, code_verifier=code_verifier)
     id_token = token_response.get("id_token")
     if not id_token:
         raise HTTPException(status_code=400, detail="No ID token returned")
