@@ -170,7 +170,7 @@ test('CHPMIS-011 mixed UI/API journey: PM C with Member D (AC-14 asset, gated ru
 
   // ---- Member D: separate fresh context (independent cookie jar), real OIDC login ----
   const memberBrowser = await playwright.chromium.launch()
-  let memberUserId = ''
+  let memberUserId: string
   try {
     const memberContext = await memberBrowser.newContext(JOURNEY_CONTEXT_OPTIONS)
     await loginThroughKeycloakOidc(memberContext, memberUsername, memberPassword)

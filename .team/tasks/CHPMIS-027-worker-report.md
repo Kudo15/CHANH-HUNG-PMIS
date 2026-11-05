@@ -67,3 +67,41 @@ Static asset authoring complete within the exact allowlist: dedicated config (25
 
 SUMMARY: Authored the CHPMIS-027 allowlisted Playwright asset — dedicated `playwright.chpmis011.config.ts` (chpmis011 spec only, 25173, no-reuse webServer, API_PROXY_TARGET 28000, Chromium, 1 worker/0 retries, artifacts off, list reporter), one mixed UI/API journey spec with real OIDC logins (PM C `project_manager` + Member D `member`, locked cookie attributes, in-memory secrets, UI project/task flow + context member API step, 401 negative check), the `test:e2e:chpmis011` script, and this report; `git diff --check` exit 0; `npm run lint` (exit 2) and `npm run build` (exit 1) NOT_VERIFIED due to pre-existing corrupted node_modules (eslint lib/utils missing, vite dist/node/chunks empty); E2E and all runtime evidence NOT_VERIFIED per the pack.
 ROLE_RESULT: review
+
+## Entry 2 — CI frontend lint remediation — 2026-11-05
+
+- Task: CHPMIS-027 CI frontend lint remediation; role: Codex Worker; trace: AC-04 frontend CI prerequisite, preserving the AC-14 static journey asset.
+- Authority: the current owner request authorizes a separate branch, npm ci/lint/unit tests/build, commit/push and Draft PR targeting audit-remediation/verify-audit-findings. It supersedes the original pack's install/commit/push restrictions for this bounded remediation only. No merge, deploy or E2E run is authorized.
+- Prompt template: reuse the pack's previously retrieved prompts.chat Feature coding template, Onyekachi Ibekwe, cmp1fv5ac0001js04jbj3pxoa. Adaptation: reproduce the specified ESLint diagnostic, remove only the dead initializer, preserve Playwright control flow, run the assigned frontend checks and request independent verification.
+- Initial checkout: clean branch work at a986d31063c52d0ea99cec164d8e5c58b1afa3e1. Remote reference verified with git ls-remote, exit 0, and fetched, exit 0: 0d9ed01b32a59d6fd5b7e94527299ce039bdb864, matching the owner's reference. The reference branch had not advanced. Recent history inspected: 0d9ed01, f13fb67, 7a27930, a986d31.
+- Working branch: fix/chpmis-027-frontend-lint, created directly from origin/audit-remediation/verify-audit-findings. No pre-existing changes were present.
+- Reads: AGENTS.md, charter, ledger, CHPMIS-027 pack/report, referenced CHPMIS-011/023 planning packs, mission/acceptance, frontend scripts/configs, CI workflow and relevant journey source.
+- Environment: Node v24.22.1, npm 11.9.0; CI config specifies Node 22.23.2, so these local results do not establish CI success.
+
+### Change and self-review
+
+- frontend/e2e/chpmis011-authenticated-journey.spec.ts:173: replace `let memberUserId = ''` with `let memberUserId: string`.
+- The empty string is never read: the try block assigns memberSession.userId before subsequent uses. A failure before assignment propagates after finally; no later use is reached. The explicit annotation preserves the inferred string type. No awaited call, assertion, cleanup, selector, authentication or authorization behavior changes.
+- This append-only report is the only other changed file. Dependencies/lockfile, CI, auth/OIDC/PKCE/cookie/CSRF/policy, migrations, database, production config and acceptance documents are unchanged. The original pack excludes ledger edits, so this evidence is recorded here and handed off for Coordinator reconciliation.
+
+### Observed verification
+
+Commands run in frontend/ unless indicated:
+
+| Command | Result | Exit code |
+|---|---|---|
+| npm ci --cache /tmp/chpmis-npm-cache | Installed 257 packages from existing lockfile | 0 |
+| npm run lint (before fix) | Exactly one no-useless-assignment error at 173:7 | 1 |
+| npm run lint (after fix) | No errors or warnings | 0 |
+| npm test -- --run | 3 files, 26 tests passed; only src unit/component tests selected by Vitest config | 0 |
+| npm run build | tsc -b and Vite build succeeded | 0 |
+| git diff --check (repository root, implementation diff) | No whitespace errors | 0 |
+
+- npm ci's cache argument only selects a writable task cache; package files are unchanged.
+- No Playwright/E2E, live service, provider, database or production action was run. No credentials or real data were logged.
+- GitHub CLI auth status reported GH_TOKEN invalid (despite command exit 0); remote delivery will be reported separately with actual push/PR outcomes. No credential extraction or replacement was attempted.
+- AC-04 remains NOT_VERIFIED until GitHub Actions on the new commit meets all criteria. Local frontend checks do not verify backend, Windows checks or CI E2E. AC-05/14 remain NOT_VERIFIED.
+- Handoff: Independent Tester must rerun the four requested frontend commands and diff check on the delivered commit; Independent Reviewer must verify the one-line control-flow-preserving change and scope. DoD remains pending that independent evidence and review.
+
+SUMMARY: Reproduced the CI lint error, removed its single dead initializer, and observed all requested local frontend checks exit 0; remote CI and independent verification remain pending.
+ROLE_RESULT: review
