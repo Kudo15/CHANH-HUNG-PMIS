@@ -9,7 +9,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest",
     "lint": "eslint .",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:chpmis011": "playwright test --config playwright.chpmis011.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "1.5.0",

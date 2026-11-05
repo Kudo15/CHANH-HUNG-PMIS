@@ -4,7 +4,7 @@
 
 - **Task ID:** CHPMIS-019-F1
 - **Role:** Hermes Frontend Worker; then OpenCode read-only Tester and separate Hermes Reviewer
-- **Status:** IN REVIEW — Worker implementation and independent Hermes review are complete; OpenCode could not run because the configured provider route had no usable key, so its verification remains NOT_VERIFIED.
+- **Status:** COMPLETE — Worker implementation and independent review are recorded. OpenCode passed focused/full frontend tests, lint and build; its scoped `git diff --check` was denied, and the owner explicitly accepted the Coordinator's exact scoped check and existing independent review for that one command. Fresh CHPMIS-022 OpenCode Reviewer approved the narrow test evidence after reading the required session documents. The original verifier's missing session-start reads remain a recorded process gap, not a retroactive pass. Details: `.team/tasks/CHPMIS-019-F1-opencode-readonly-verification.md`.
 - **Trace:** mission §6, CHPMIS-019 UI reliability; existing frontend project-workbench contract.
 
 ## Objective

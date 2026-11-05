@@ -4,9 +4,9 @@ Secure modular-monolith project information management system for Ban QLDA phư�
 
 ## Current stage
 
-CHPMIS-003–008 delivered the local OIDC/session and authorization foundation, projects/members/tasks, approved task transitions, scoped dashboard/audit, and Project Workbench. CHPMIS-010 verified local Compose/PostgreSQL runtime and obtained Hermes evidence review approval. Acceptance is 12 of 15 PASS; remote CI, actual IdP sign-in and the full authenticated browser journey remain NOT_VERIFIED. See `ACCEPTANCE.md` and `.team/tasks/CHPMIS-010-runtime-evidence.md`.
+As of 2026-11-03, the local first slice includes the OIDC/session and authorization foundation, project/task workflow, dashboard/audit, Project Workbench, and the scoped CHPMIS-012-F1 PKCE/browser-binding implementation. CHPMIS-019-F1 is complete with the owner's approved substitution for a denied OpenCode diff check; its earlier verifier session-start gap remains recorded. CHPMIS-020 is in progress. CHPMIS-018-F1's Worker reports a live synthetic PostgreSQL lost update; the independent Tester was blocked by its shell allowlist, so live RED remains NOT_VERIFIED independently. The owner chose to keep F1-T1 blocked and accepted the Coordinator's six final checks plus independent R2 review as a scoped substitute to close CHPMIS-018-F2; the six OpenCode Tester checks remain NOT_VERIFIED. Acceptance records 12 PASS and 3 NOT_VERIFIED: CHPMIS-021 ran the empty-database migration through current head `0007_oidc_pkce_browser_binding` and a fresh OpenCode Reviewer approved the evidence. AC-04 remote CI, AC-05 live synthetic-provider sign-in, and AC-14 authenticated browser E2E remain NOT_VERIFIED. See `ACCEPTANCE.md` for the evidence and `.team/ledger.md` for task status.
 
-CHPMIS-009 completed documentation reconciliation and candidate checkpoint preparation, with OpenCode independent verification and Hermes review approval. Source files remain untracked until a separate local checkpoint is actually staged and committed; a manifest alone does not make a worktree usable. See `.team/baselines/CHPMIS-009-checkpoint.md`.
+CHPMIS-009 completed documentation reconciliation and candidate checkpoint preparation, with OpenCode independent verification and Hermes review approval. Its manifest is a historical snapshot; subsequent source commits and the current uncommitted changes are reflected in Git status. See `.team/baselines/CHPMIS-009-checkpoint.md`.
 
 ## Start here
 
@@ -39,7 +39,7 @@ Requires Node 22.23.2+, Python 3.13, and Docker Compose v2 for the full stack.
 
 1. Copy `.env.example` to `.env`. Replace the password placeholder in both `POSTGRES_PASSWORD` and `DATABASE_URL` with the same synthetic development value. URL-encode password characters in the URL.
 2. From the repository root, run `docker compose up --build -d`.
-3. Apply the existing migration chain through revision `0004`: `docker compose exec backend python -m alembic upgrade head` against a disposable synthetic development database.
+3. Apply the current migration head, `0007_oidc_pkce_browser_binding`: `docker compose exec backend python -m alembic upgrade head` against a disposable synthetic development database. The command targets the current head; a live empty-database upgrade through 0007 is still NOT_VERIFIED.
 4. Open `http://127.0.0.1:5173`. API health is at `http://127.0.0.1:8000/health/live` and `/health/ready`.
 5. Stop with `docker compose down`. The named PostgreSQL volume persists local data.
 
@@ -60,8 +60,8 @@ Set `DATABASE_URL` in the process environment; the backend does not load a `.env
 
 ### Frontend and verification
 
-From `frontend/`: `npm ci`, `npm run dev`, `npm test -- --run`, `npm run lint`, and `npm run build`. The development server binds to `127.0.0.1:5173` and currently proxies only `/health` to the native backend. Full browser API/OIDC routing is not yet verified. Run `npx playwright install chromium` once, then `npm run test:e2e` for the shell smoke check; it is not the complete authenticated journey.
+From `frontend/`: `npm ci`, `npm run dev`, `npm test -- --run`, `npm run lint`, and `npm run build`. The development server binds to `127.0.0.1:5173` and proxies `/api` and `/health` to the configured backend. Full browser API/OIDC routing is not yet verified. Run `npx playwright install chromium` once, then `npm run test:e2e` for the shell smoke check; it is not the complete authenticated journey.
 
-From `backend/`: `.venv/Scripts/python -m pytest -q`, `.venv/Scripts/python -m ruff check .`, and `.venv/Scripts/python -m ruff format --check .`. On Linux/CI use `python` from the installed environment. `python -m alembic upgrade head --sql` renders the current migration chain offline; it does not verify PostgreSQL execution. The PostgreSQL integration test is skipped without `TEST_DATABASE_URL`. CHPMIS-010 corrected its obsolete assertions to the approved revision `0004_projects_tasks_audit` and exact ten-table set. OpenCode independently recorded 62 passed/1 skipped before runtime setup. CHPMIS-010 Coordinator then ran focused live PostgreSQL (1 passed) and full backend (63 passed/no skips), both exit 0; Hermes independently reviewed and accepted that evidence without a live rerun. Use only a dedicated disposable test database.
+From `backend/`: `.venv/Scripts/python -m pytest -q`, `.venv/Scripts/python -m ruff check .`, and `.venv/Scripts/python -m ruff format --check .`. On Linux/CI use `python` from the installed environment. `python -m alembic upgrade head --sql` renders the migration chain offline; it does not verify PostgreSQL execution. PostgreSQL integration tests skip without `TEST_DATABASE_URL`. CHPMIS-021 ran the focused empty-database test on a dedicated synthetic service and inspected revision 0007 and 12 tables; a fresh OpenCode Reviewer approved the evidence without a runtime rerun. The CHPMIS-012-F1 full PostgreSQL module remains independently unverified. Use only a dedicated synthetic test database.
 
 CI defines backend lint/tests with disposable PostgreSQL, Compose config validation, frontend lint/tests/build, and a Playwright shell smoke check. No remote CI run or Docker runtime/config result is implied by adding this workflow.

@@ -2,7 +2,7 @@
 
 - Owner authorization: design explicitly approved on 2026-10-31; proceed with implementation and local synthetic verification.
 - Roles: Codex Coordinator/Planner; Hermes Worker; independent OpenCode Tester; separate Hermes Reviewer. Inherit each harness's configured defaults, no model/provider overrides; run sequentially in the existing dirty checkout.
-- Status: IN PROGRESS.
+- Status: IN PROGRESS — staged synthetic runtime candidate approved for further planning by independent OpenCode review; executable supporting assets, consolidated review and a separate owner Human Gate remain. AC-05/14 live runtime remains NOT_VERIFIED.
 - Trace: AC-05; current CHPMIS-010 head `0004_projects_tasks_audit`; approved local Keycloak + one-time offline two-person bootstrap design.
 - Role contract: Worker implementation only. Read this pack first and implement the bounded plan; do not dispatch helpers/reviewers, commit, stage, push, deploy, or alter any files outside the allowlist. Work in the existing repo checkout and preserve every pre-existing change. Post progress and finish the Hermes card with exactly one of `kanban_complete`, `kanban_request_review`, or `kanban_block`, including exact evidence and concerns.
 - Approved design: `docs/superpowers/specs/2026-10-31-chpmis-011-local-oidc-bootstrap-design.md`.

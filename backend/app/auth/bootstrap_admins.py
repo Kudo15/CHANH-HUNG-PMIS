@@ -697,7 +697,7 @@ class WindowsRegistryBackend:
                 val_name_buf = ctypes.create_unicode_buffer(256)
                 cch_val_name = wintypes.DWORD(256)
                 val_type = wintypes.DWORD()
-                data_buf = (ctypes.c_byte * 256)()
+                data_buf = (ctypes.c_ubyte * 256)()
                 cb_data = wintypes.DWORD(256)
 
                 ret = advapi32.RegEnumValueW(

@@ -1,0 +1,4 @@
+interface:
+  display_name: "/trace"
+  short_description: "Report delegated agent runs in a consistent table"
+  default_prompt: "Summarize the agent runs in this task using the trace report format."

@@ -1,0 +1,54 @@
+# CHPMIS-023 standalone synthetic test topology (DESIGN ONLY — NOT APPROVED FOR EXECUTION).
+# Services: ONLY an isolated PostgreSQL and Keycloak for the four-user synthetic realm.
+# - Standalone file: does not inherit or merge the root compose.yaml; never run with -f on both files.
+# - Loopback-only host bindings: PostgreSQL 127.0.0.1:25432, Keycloak 127.0.0.1:28081.
+# - No backend/frontend services or ports in this file.
+# - Data stays in the new project-scoped named volume chpmis011_isolated_pgdata (never external,
+#   never the existing pgdata or any other project's volume).
+# - All credentials are environment placeholders required from the process environment; no literals.
+# - The fixed project name chpmis023config is for config rendering only. The final runtime must
+#   select a unique project at execution and stop if that project, its volume, or either planned
+#   loopback port already exists. This file does not authorize starting, creating, or reusing
+#   any service, database, or volume.
+
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pmis_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-pmis_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in process env or .env}
+    ports:
+      - "127.0.0.1:25432:5432"
+    volumes:
+      - chpmis011_isolated_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    profiles:
+      - local-oidc
+    command: start-dev --import-realm --health-enabled=true
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?Set KC_BOOTSTRAP_ADMIN_PASSWORD in process env or .env}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Set OIDC_CLIENT_SECRET in process env or .env}
+      KC_SYNTHETIC_ADMIN1_PASSWORD: ${KC_SYNTHETIC_ADMIN1_PASSWORD:?Set KC_SYNTHETIC_ADMIN1_PASSWORD in process env or .env}
+      KC_SYNTHETIC_ADMIN2_PASSWORD: ${KC_SYNTHETIC_ADMIN2_PASSWORD:?Set KC_SYNTHETIC_ADMIN2_PASSWORD in process env or .env}
+      KC_SYNTHETIC_PM_PASSWORD: ${KC_SYNTHETIC_PM_PASSWORD:?Set KC_SYNTHETIC_PM_PASSWORD in process env}
+      KC_SYNTHETIC_MEMBER_PASSWORD: ${KC_SYNTHETIC_MEMBER_PASSWORD:?Set KC_SYNTHETIC_MEMBER_PASSWORD in process env}
+      JAVA_OPTS_APPEND: "-Dkeycloak.migration.replace-placeholders=true"
+      KC_HOSTNAME: http://127.0.0.1:28081
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_PORT: 8080
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:28081:8080"
+    volumes:
+      - ./realm.chpmis011-isolated.json:/opt/keycloak/data/import/realm.json:ro
+
+volumes:
+  chpmis011_isolated_pgdata:

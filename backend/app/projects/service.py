@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth.models import User
@@ -539,6 +539,27 @@ def transition_task_status(
 
     if project.lifecycle == "archived":
         raise HTTPException(status_code=400, detail="Cannot modify tasks in an archived project")
+
+    # CHPMIS-018-F2: serialize concurrent status decisions for this task.
+    # Re-read the task row with a PostgreSQL row lock inside the current
+    # transaction so the transition decision and the audit write are
+    # evaluated against the latest committed state. A concurrent request that
+    # committed first is observed here and judged against the existing
+    # approved transition graph (400 semantics unchanged). ``populate_existing``
+    # forces the ORM to refresh the already-loaded instance from the locked
+    # row, so a previously read stale status cannot leak into the decision.
+    # The row lock is acquired only after the access/non-disclosure checks
+    # above and is held until commit/rollback of this transaction, so the
+    # status update and audit insertion remain atomic with the decision.
+    locked_task = db.execute(
+        select(Task)
+        .where(Task.id == task_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if locked_task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task = locked_task
 
     current_status = task.status
     target = target_status.value

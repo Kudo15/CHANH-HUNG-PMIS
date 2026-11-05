@@ -4,7 +4,7 @@
 
 - **Task ID:** CHPMIS-018-F1
 - **Role:** PostgreSQL Test Worker (test-only); then independent Tester/Reviewer
-- **Status:** READY — mission §6 requires a task lost-update reproduction; no product fix is authorized by this pack.
+- **Status:** REVIEW APPROVED / T1 BLOCKED — Retry run `2026-11-03T00-29-52-worker-worker-chpmis-018-f1-deterministic-postg-6c9c` exceeded its 900s driver timeout, then the owner directed the agent to stop. Resuming the same session with the stop instruction returned role status `review`: Worker reports live PostgreSQL RED on six preserved `018_f1` databases, additive test and report present, assigned checks recorded, and no product fix or commit. Session `ses_e612ff84cffeagvtFGglINDZGG` is stopped on owner instruction. OpenCode T1 Tester finished `BLOCKED / NOT_VERIFIED`: all four assigned commands were denied before execution, so live RED was not independently reproduced; its static scope observations are recorded in `.team/tasks/CHPMIS-018-F1-opencode-tester.md`. OpenCode R1's sole P2-1 was addressed by Worker R2 and independently approved by OpenCode R2. The owner chose to keep T1 blocked rather than authorize the proposed environment exception; no retry was dispatched. No product fix is authorized by this pack.
 - **Trace:** mission §6; approved Human Gate 3 transition graph; existing CHPMIS-018 task consistency finding.
 
 ## Objective
@@ -49,6 +49,6 @@ Report exact output, exit, skip status, database name, and preservation evidence
 - No product code/schema changes occur; any reproduced defect stays blocked for a separate approved fix.
 - Independent review assesses the test-only diff.
 
-## Hermes card closing contract
+## OpenCode Worker closing contract
 
-ROLE: worker (test-only). Work only in this task's workspace. Keep Worker, Tester, Reviewer serialized. Finish with exactly one of `kanban_request_review(summary=...)`, `kanban_block(reason=...)`, or `kanban_complete(result=...)`; include RED result, commands, output/exits, skip status, database name, requirement trace, and limits. Do not commit.
+ROLE: test-only Worker. Work only within the files and objective listed above. Keep Worker, Tester, and Reviewer serialized. In your final response include the RED result, exact commands and outputs/exits, skip status, synthetic database name, requirement trace, and limits. Do not commit.

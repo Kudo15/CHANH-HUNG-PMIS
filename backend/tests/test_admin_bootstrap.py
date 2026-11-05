@@ -1524,7 +1524,7 @@ def test_registry_exact_dacl_and_ace_validation_on_task_created_keys():
     assert res["project_owner"] == po_bytes
 
 
-def test_registry_generic_masks_mapped_before_access_check():
+def test_win32_registry_generic_masks_mapped_before_access_check():
     """Verify registry generic mapping maps GENERIC masks to specific rights."""
     import ctypes
     from ctypes import wintypes
@@ -1532,7 +1532,7 @@ def test_registry_generic_masks_mapped_before_access_check():
     from app.auth import bootstrap_admins as ba
 
     if ba.sys.platform != "win32":
-        pytest.skip("Win32 ctypes test applicable only on win32 platform")
+        pytest.skip("Win32 ctypes/registry tests run in windows-backend CI job")
 
     gm = ba.GENERIC_MAPPING()
     gm.GenericRead = ba.KEY_READ
@@ -1559,7 +1559,7 @@ def test_win32_ctypes_prototype_declarations():
     from app.auth import bootstrap_admins as ba
 
     if ba.sys.platform != "win32":
-        pytest.skip("Win32 ctypes test applicable only on win32 platform")
+        pytest.skip("Win32 ctypes/registry tests run in windows-backend CI job")
 
     # Verify HKEY_LOCAL_MACHINE sign-extension
     if ctypes.sizeof(ctypes.c_void_p) == 8:
@@ -1628,6 +1628,9 @@ def test_windows_registry_backend_null_pointers_and_cleanup_on_error():
 
     from app.auth import bootstrap_admins as ba
 
+    if ba.sys.platform != "win32":
+        pytest.skip("Win32 ctypes/registry tests run in windows-backend CI job")
+
     fake_kernel32 = MagicMock()
     fake_advapi32 = MagicMock()
 
@@ -1693,3 +1696,214 @@ def test_windows_registry_backend_null_pointers_and_cleanup_on_error():
     assert fake_kernel32.LocalFree.called
     assert fake_advapi32.RegCloseKey.called
     assert fake_kernel32.CloseHandle.called
+
+
+def test_windows_registry_backend_non_windows_platform_guard(monkeypatch):
+    """Verify WindowsRegistryBackend rejects non-Windows execution fail-closed."""
+    from app.auth import bootstrap_admins as ba
+
+    backend = ba.WindowsRegistryBackend()
+    monkeypatch.setattr(backend, "is_windows", lambda: False)
+    with pytest.raises(
+        ba.BootstrapError,
+        match=r"Registry trust boundary is supported only on Windows \(win32\)",
+    ):
+        backend.read_trusted_keys()
+
+
+def _make_mock_win32_backend(po_bytes: bytes, sr_bytes: bytes):
+    import ctypes
+    from ctypes import wintypes
+    from unittest.mock import MagicMock
+
+    from app.auth import bootstrap_admins as ba
+
+    fake_kernel32 = MagicMock()
+    fake_advapi32 = MagicMock()
+
+    fake_kernel32.GetCurrentProcess.return_value = 1
+    fake_advapi32.OpenProcessToken.return_value = 1
+    fake_advapi32.DuplicateToken.return_value = 1
+    fake_kernel32.CloseHandle.return_value = 1
+    fake_kernel32.LocalFree.return_value = None
+
+    fake_advapi32.RegOpenKeyExW.return_value = 0
+    fake_advapi32.RegCloseKey.return_value = 0
+    fake_advapi32.GetSecurityInfo.return_value = 0
+
+    def fake_control(p_sd, p_ctrl, p_rev):
+        p_ctrl._obj.value = ba.SE_DACL_PRESENT | ba.SE_DACL_PROTECTED
+        return 1
+
+    fake_advapi32.GetSecurityDescriptorControl.side_effect = fake_control
+
+    def fake_owner(p_sd, p_owner, p_defaulted):
+        p_owner._obj.value = 1234
+        if p_defaulted:
+            p_defaulted._obj.value = 0
+        return 1
+
+    fake_advapi32.GetSecurityDescriptorOwner.side_effect = fake_owner
+
+    ace_specs = [
+        (ba.SID_LOCAL_SYSTEM, ba.KEY_ALL_ACCESS),
+        (ba.SID_BUILTIN_ADMINISTRATORS, ba.KEY_ALL_ACCESS),
+        (ba.SID_BUILTIN_USERS, ba.KEY_READ),
+    ]
+    aces = []
+    sid_ptrs = {}
+    for sid_str, mask in ace_specs:
+        ace = ba.ACCESS_ALLOWED_ACE()
+        ace.Header.AceType = ba.ACCESS_ALLOWED_ACE_TYPE
+        ace.Header.AceFlags = 0
+        ace.Header.AceSize = ctypes.sizeof(ba.ACCESS_ALLOWED_ACE)
+        ace.Mask = mask
+        aces.append(ace)
+        sid_offset = ctypes.sizeof(ba.ACE_HEADER) + ctypes.sizeof(wintypes.DWORD)
+        sid_ptrs[ctypes.addressof(ace) + sid_offset] = sid_str
+
+    def fake_dacl(p_sd, p_present, p_dacl, p_defaulted):
+        p_present._obj.value = 1
+        p_dacl._obj.value = 5678
+        if p_defaulted:
+            p_defaulted._obj.value = 0
+        return 1
+
+    fake_advapi32.GetSecurityDescriptorDacl.side_effect = fake_dacl
+
+    def fake_acl_info(p_dacl, p_info, info_len, info_class):
+        p_info._obj.AceCount = 3
+        return 1
+
+    fake_advapi32.GetAclInformation.side_effect = fake_acl_info
+
+    def fake_get_ace(p_dacl, idx, p_ace):
+        p_ace._obj.value = ctypes.addressof(aces[idx])
+        return 1
+
+    fake_advapi32.GetAce.side_effect = fake_get_ace
+
+    def fake_convert_sid(p_sid, p_str):
+        val = p_sid.value if hasattr(p_sid, "value") else p_sid
+        if val in sid_ptrs:
+            p_str._obj.value = sid_ptrs[val]
+        else:
+            p_str._obj.value = ba.SID_BUILTIN_ADMINISTRATORS
+        return 1
+
+    fake_advapi32.ConvertSidToStringSidW.side_effect = fake_convert_sid
+
+    def fake_access_check(p_sd, token, access, p_gm, p_ps, p_ps_len, p_granted, p_status):
+        p_status._obj.value = 0
+        return 1
+
+    fake_advapi32.AccessCheck.side_effect = fake_access_check
+
+    def fake_query_info_key(leaf_key, *args):
+        c_values = args[6]
+        c_values._obj.value = 2
+        return 0
+
+    fake_advapi32.RegQueryInfoKeyW.side_effect = fake_query_info_key
+
+    def fake_enum_value(
+        leaf_key, idx, val_name_buf, cch_val_name, reserved, val_type, data_buf, cb_data
+    ):
+        if idx == 0:
+            val_name_buf.value = ba.VAL_PROJECT_OWNER
+            val_type._obj.value = ba.REG_BINARY
+            cb_data._obj.value = len(po_bytes)
+            ctypes.memmove(data_buf, po_bytes, len(po_bytes))
+            return 0
+        elif idx == 1:
+            val_name_buf.value = ba.VAL_SECURITY_REVIEWER
+            val_type._obj.value = ba.REG_BINARY
+            cb_data._obj.value = len(sr_bytes)
+            ctypes.memmove(data_buf, sr_bytes, len(sr_bytes))
+            return 0
+        return 259
+
+    fake_advapi32.RegEnumValueW.side_effect = fake_enum_value
+
+    backend = ba.WindowsRegistryBackend(advapi32=fake_advapi32, kernel32=fake_kernel32)
+    return backend, fake_advapi32, fake_kernel32, aces
+
+
+def test_windows_registry_backend_read_trusted_keys_signed_bytes_preservation():
+    """Verify WindowsRegistryBackend preserves raw bytes containing 0x80 and 0xff."""
+    from app.auth import bootstrap_admins as ba
+
+    if ba.sys.platform != "win32":
+        pytest.skip("Win32 ctypes/registry tests run in windows-backend CI job")
+
+    po_bytes = bytes([0x80, 0xFF] + [i % 256 for i in range(2, 32)])
+    sr_bytes = bytes([0xFF, 0x80] + [(i * 3) % 256 for i in range(2, 32)])
+    assert len(po_bytes) == 32
+    assert len(sr_bytes) == 32
+    assert po_bytes != sr_bytes
+
+    backend, _, _, _ = _make_mock_win32_backend(po_bytes, sr_bytes)
+    res = backend.read_trusted_keys()
+    assert res["project_owner"] == po_bytes
+    assert res["security_reviewer"] == sr_bytes
+
+
+def test_windows_registry_backend_negative_and_cleanup_cases():
+    """Verify WindowsRegistryBackend validates value types/lengths, Win32 errors, and cleans up."""
+    from app.auth import bootstrap_admins as ba
+
+    if ba.sys.platform != "win32":
+        pytest.skip("Win32 ctypes/registry tests run in windows-backend CI job")
+
+    po_bytes = bytes([0x80] + [1] * 31)
+    sr_bytes = bytes([0xFF] + [2] * 31)
+
+    # 1. Invalid value type (not REG_BINARY)
+    backend, fake_advapi32, fake_kernel32, _ = _make_mock_win32_backend(po_bytes, sr_bytes)
+    orig_enum = fake_advapi32.RegEnumValueW.side_effect
+
+    def fake_enum_bad_type(
+        leaf_key, idx, val_name_buf, cch_val_name, reserved, val_type, data_buf, cb_data
+    ):
+        orig_enum(leaf_key, idx, val_name_buf, cch_val_name, reserved, val_type, data_buf, cb_data)
+        val_type._obj.value = 1  # REG_SZ
+        return 0
+
+    fake_advapi32.RegEnumValueW.side_effect = fake_enum_bad_type
+    with pytest.raises(ba.BootstrapError, match="must be of type REG_BINARY"):
+        backend.read_trusted_keys()
+    assert fake_kernel32.LocalFree.called
+    assert fake_advapi32.RegCloseKey.called
+
+    # 2. Invalid value length (!= 32 bytes)
+    backend, fake_advapi32, fake_kernel32, _ = _make_mock_win32_backend(po_bytes, sr_bytes)
+
+    def fake_enum_bad_len(
+        leaf_key, idx, val_name_buf, cch_val_name, reserved, val_type, data_buf, cb_data
+    ):
+        orig_enum(leaf_key, idx, val_name_buf, cch_val_name, reserved, val_type, data_buf, cb_data)
+        cb_data._obj.value = 16
+        return 0
+
+    fake_advapi32.RegEnumValueW.side_effect = fake_enum_bad_len
+    with pytest.raises(ba.BootstrapError, match="must be exactly 32 bytes"):
+        backend.read_trusted_keys()
+    assert fake_kernel32.LocalFree.called
+    assert fake_advapi32.RegCloseKey.called
+
+    # 3. RegEnumValueW failure
+    backend, fake_advapi32, fake_kernel32, _ = _make_mock_win32_backend(po_bytes, sr_bytes)
+    fake_advapi32.RegEnumValueW.side_effect = None
+    fake_advapi32.RegEnumValueW.return_value = 5  # ERROR_ACCESS_DENIED
+    with pytest.raises(ba.BootstrapError, match="RegEnumValueW failed for index 0"):
+        backend.read_trusted_keys()
+    assert fake_kernel32.LocalFree.called
+    assert fake_advapi32.RegCloseKey.called
+
+    # 4. Same key for both roles rejected
+    same_bytes = bytes([1] * 32)
+    backend, fake_advapi32, fake_kernel32, _ = _make_mock_win32_backend(same_bytes, same_bytes)
+    with pytest.raises(ba.BootstrapError, match="must be distinct"):
+        backend.read_trusted_keys()
+    assert fake_kernel32.LocalFree.called
+    assert fake_advapi32.RegCloseKey.called

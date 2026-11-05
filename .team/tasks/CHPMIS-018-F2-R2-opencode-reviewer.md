@@ -1,0 +1,22 @@
+# CHPMIS-018-F2-R2 — Independent review of the strengthened regression
+
+- **Role:** separate read-only OpenCode Reviewer; **trace:** CHPMIS-018-F2, mission §6 and approved HG3 transition behavior.
+- **Required session start:** Read `AGENTS.md`, `.team/CHARTER.md`, `.team/ledger.md`, the original F2 Worker pack, `.team/tasks/CHPMIS-018-F2-R2-regression-worker.md`, the Worker report including appended §9, `.team/tasks/CHPMIS-018-F2-opencode-tester.md`, `.team/tasks/CHPMIS-018-F2-opencode-reviewer.md` including R1 outcome, `docs/MISSION.md`, `ACCEPTANCE.md`, and relevant code. Report these reads.
+- **Scope:** Assess the final service and test diff without changing files, running tests, inspecting credentials, accessing databases/services, changing permissions, or using other agents. Assess the bounded pre-lock barrier, connection matching, event listener cleanup and possibility of deadlock; whether it forces both initial task reads before either lock SELECT and detects stale identity state; unchanged graph, response, non-disclosure and audit atomicity; preserved F1 evidence and existing admin tests; and whether current claims accurately match code and live evidence. Check the use of `id(conn)` versus the docstring's claim of a DBAPI connection identity, and avoid overclaiming what the evidence proves.
+- **Evidence:** Coordinator R2 live verification and exact commands/exits are recorded in `.team/ledger.md`; Worker's static results and limitations are in report §9. Original F2 Tester command 1 was denied before execution; commands 2–6 were not attempted; all six are NOT_VERIFIED, not independently passed. No waiver has been granted for F2. The prior OS-temp helper write is a recorded scope deviation and remains preserved.
+- **DoD:** Return `APPROVED` or `CHANGES_REQUESTED` with actionable severity and file/line for findings. Separate real blockers from nonblocking evidence wording. Identify any remaining prerequisites without closing the task or suggesting bypassing the Tester role's permission deny.
+
+SUMMARY: <one line>
+ROLE_RESULT: <done|review|blocked>
+
+## Outcome — 2026-11-03
+
+Driver exceeded 1200 seconds; role ledger records timeout / exit 1. The same GUI session `ses_e5f9100ffffe0xGwLJ55HVQAa8` continued and finished `ROLE_RESULT: done` / **APPROVED**, no P1/P2 and 3 nonblocking P3 findings. Final-message model `auto:coding`, provider `openai-completions`, cost 0, tokens input 20369 / output 3691 / cache-read 86400, not session total. Reviewer reports all required session reads; review was static and read-only, without test or database access.
+
+Reviewer confirms the bounded pre-lock barrier forces both initial reads to complete before either locking SELECT, detects stale ORM identity state and a missing lock as regression cases, and avoids waiting on another lock while holding one. It finds the graph, response behavior, non-disclosure, atomic audit, F1 record and prior admin tests preserved. Coordinator's live R2 results remain separately attributed; the blocked Tester is not reclassified as a pass.
+
+- **P3-1, wording:** test/report describe `id(conn)` as a DBAPI connection identity. Reviewer also describes the callback argument as DBAPI. Coordinator checked the installed SQLAlchemy documentation at `backend/.venv/Lib/site-packages/sqlalchemy/engine/events.py:306` and `:336`: the event's `conn` argument is a SQLAlchemy `Connection`, not a DBAPI connection. `id(conn)` identifies that live Python wrapper object. The stronger claim that this is directly the DBAPI identity is not supported. Reviewer regards the observation as nonblocking; no code was edited to alter the historical two-review-round boundary.
+- **P3-2, wording:** the report's statement that non-overlap is indistinguishable applies to the outcome/audit assertions alone; the barrier assertion itself rejects a run that does not reach the forced interleaving.
+- **P3-3, optional hardening:** listener removals suppress exceptions, so a future removal failure might leave a class-level listener; Reviewer considers this nonblocking and notes no later in-process test specifically checks for a leak.
+
+The original F2 Tester check 1 was denied before execution, checks 2–6 were not attempted, and all six are NOT_VERIFIED. The review itself granted no Tester waiver. The owner subsequently accepted the Coordinator's six exact final checks together with this independent static review as the scoped substitute for closing F2; the denied/NOT_VERIFIED record is unchanged. F1-T1 remains BLOCKED independently.

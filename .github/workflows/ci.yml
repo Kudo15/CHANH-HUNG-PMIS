@@ -42,6 +42,18 @@ jobs:
           KC_SYNTHETIC_ADMIN1_PASSWORD: synthetic_ci_only
           KC_SYNTHETIC_ADMIN2_PASSWORD: synthetic_ci_only
         run: docker compose config --quiet
+  windows-backend:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -q tests/test_admin_bootstrap.py -k "windows_registry or win32"
   frontend:
     runs-on: ubuntu-latest
     defaults:
